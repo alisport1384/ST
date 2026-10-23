@@ -38,6 +38,12 @@ class SeriesPickTest {
     }
 
     @Test
+    fun `large series sampling still detects its base timeframe`() {
+        val largeM1 = series(60, 100_001)
+        assertEquals(60L, SeriesPick.stepOf(largeM1))
+    }
+
+    @Test
     fun `same timeframe tolerance is one and a half`() {
         assertTrue(SeriesPick.sameTf(3000L, 3600L))     // ۵۰ دقیقه ≈ ۱ ساعت
         assertFalse(SeriesPick.sameTf(900L, 3600L))

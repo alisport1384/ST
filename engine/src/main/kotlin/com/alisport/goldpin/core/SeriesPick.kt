@@ -19,6 +19,22 @@ object SeriesPick {
     /** فاصلهٔ میانی زمانی کندل‌ها بر حسب ثانیه (۰ = نامشخص/کوتاه‌تر از دو کندل). */
     fun stepOf(list: List<Candle>): Long {
         if (list.size < 2) return 0L
+        // تاریخچهٔ ده‌ساله می‌تواند بیش از ۳٫۴ میلیون کندل داشته باشد. گرفتن median
+        // دقیق با ArrayList<Long> هم boxed-memory سنگین می‌سازد و هم چند ثانیه sort می‌کند؛
+        // برای تشخیص تایم‌فریم، نمونه‌برداری یکنواخت از 4096 فاصله به‌اندازهٔ کافی مقاوم است.
+        if (list.size > 100_000) {
+            val sampleSize = 4096
+            val steps = LongArray(sampleSize)
+            var count = 0
+            for (j in 0 until sampleSize) {
+                val i = 1 + (((list.size - 2L) * j) / (sampleSize - 1)).toInt()
+                val d = (list[i].t - list[i - 1].t) / 1000L
+                if (d > 0) steps[count++] = d
+            }
+            if (count == 0) return 0L
+            steps.sort(0, count)
+            return steps[count / 2]
+        }
         val steps = ArrayList<Long>(list.size - 1)
         for (i in 1 until list.size) {
             val d = (list[i].t - list[i - 1].t) / 1000L

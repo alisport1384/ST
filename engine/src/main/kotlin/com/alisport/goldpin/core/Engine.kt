@@ -391,7 +391,8 @@ class Engine(val cfg: Settings) {
         t2History.clear(); t1History.clear()
         zoneRefH = Double.NaN; zoneRefL = Double.NaN
         livePreview.clear(); liveCandle = null
-        times.clear()
+        times = LongArray(0)
+        seedTimes.clear()
     }
 
     // ── ورود داده ──────────────────────────────────────────────────────────────
@@ -424,6 +425,7 @@ class Engine(val cfg: Settings) {
     /** بارگذاری کامل از صفر (برای بک‌تست). همهٔ کندل‌ها بسته‌اند. */
     fun runAll(candles: List<Candle>) {
         reset()
+        reserveTimeCapacity(candles.size)
         feed(candles, lastIsClosed = true)
     }
 
@@ -457,7 +459,7 @@ class Engine(val cfg: Settings) {
         for ((index, src) in history.withIndex()) {
             val bi = firstBi + index
             val bar = Candle(bi, src.t, src.o, src.h, src.l, src.c, src.v)
-            times[bi] = bar.t
+            recordTime(bi, bar.t)
             curBi = bi
             curT = bar.t + cfg.tfS * 1000L
             curVol = bar.v
@@ -480,7 +482,7 @@ class Engine(val cfg: Settings) {
      */
     private fun updateLive(cd: Candle, i: Int, prev: Candle?) {
         curBi = i; curT = cd.t; curVol = cd.v; liveCandle = cd
-        times[i] = cd.t
+        recordTime(i, cd.t)
         livePreview.clear()
         prevChartVol = prev?.v ?: Double.NaN
         // وضعیت‌های در انتظار (فقط خواندنی)
@@ -510,10 +512,7 @@ class Engine(val cfg: Settings) {
     // ── پردازش کندل بسته ───────────────────────────────────────────────────────
     private fun processClosed(cd: Candle, i: Int, prev: Candle?) {
         curBi = i; curT = cd.t; curVol = cd.v
-        times[i] = cd.t
-        // سقف باید از بیشترین دیتاست داخلی (سه سال و حدود ۱٫۰۴ میلیون M1) بالاتر باشد؛
-        // پاک‌کردن HashMap وسط بک‌تست زمان مارکرهای قدیمی را از بین می‌برد.
-        if (times.size > 1_500_000) times.clear()
+        recordTime(i, cd.t)
         val isNewS = Tf.isNewBarStart(tfS(), cd.t, prev?.t)
         val isNewM = Tf.isNewBarStart(tfM(), cd.t, prev?.t)
         val isNew1 = Tf.isNewBarStart(tf1(), cd.t, prev?.t)
@@ -2573,7 +2572,7 @@ class Engine(val cfg: Settings) {
     }
 
     private fun addMarker(bi: Int, price: Double, kind: Int, text: String) {
-        val t = times[bi] ?: curT
+        val t = timeAt(bi) ?: curT
         addMarkerAtTime(t, bi, price, kind, text)
     }
 
@@ -2584,7 +2583,7 @@ class Engine(val cfg: Settings) {
     private fun addStructLabel(text: String, pinKind: Int, price: Double, impBi: Int) {
         if (price.isNaN()) return
         var bi = impBi
-        var t = if (impBi != -1) times[impBi] else null
+        var t = if (impBi != -1) timeAt(impBi) else null
         if (impBi == -1) {
             val pm = markers.lastOrNull { it.kind == pinKind && it.price == price }
             if (pm != null) { bi = pm.bi; t = pm.t }
@@ -2624,8 +2623,29 @@ class Engine(val cfg: Settings) {
         }
     }
 
-    /** نگاشت ایندکس کندل → زمان (برای برچسب‌ها و ذخیره‌سازی). */
-    private val times = HashMap<Int, Long>()
+    /** زمان‌های کندل با LongArray فشرده نگه‌داری می‌شوند؛ HashMap در تاریخچهٔ ده‌ساله OOM می‌داد. */
+    private var times = LongArray(0)
+    /** فقط کندل‌های seed ساختار ایندکس منفی دارند و تعدادشان محدود است. */
+    private val seedTimes = HashMap<Int, Long>()
+
+    /** رزرو دقیق حافظه پیش از بک‌تست کامل، برای جلوگیری از چندبار کپی آرایه. */
+    fun reserveTimeCapacity(bars: Int) {
+        val capacity = bars.coerceAtMost(MAX_TIME_CAPACITY)
+        if (capacity > times.size) times = LongArray(capacity)
+    }
+
+    private fun recordTime(bi: Int, t: Long) {
+        if (bi < 0) { seedTimes[bi] = t; return }
+        if (bi >= MAX_TIME_CAPACITY) return // bound the live-session index cache on very long runtimes
+        if (bi >= times.size) {
+            val doubled = if (times.isEmpty()) 16 else times.size * 2
+            times = times.copyOf(minOf(MAX_TIME_CAPACITY, maxOf(bi + 1, doubled)))
+        }
+        times[bi] = t
+    }
+
+    private fun timeAt(bi: Int): Long? = if (bi < 0) seedTimes[bi]
+        else times.getOrNull(bi)?.takeIf { it != 0L }
 
     fun stageFa(st: Int): String = when (st) {
         0 -> "منتظر برخورد به ناحیهٔ ساختار"
@@ -2640,6 +2660,8 @@ class Engine(val cfg: Settings) {
     }
 
     companion object {
+        private const val MAX_TIME_CAPACITY = 5_000_000
+
         /** حداقل تعداد ستاپ‌های در حال پیگیری (ناحیه‌های منتظر لمس تا معامله)؛ مستقل از «حداکثر ستاپ هم‌زمان». */
         const val TRACKED_SETUPS_MIN = 512
 

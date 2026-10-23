@@ -25,7 +25,10 @@ class RepositoryMultiYearDataTest {
             1_724_198_400_000L, 1_787_270_340_000L),
         Expected(3, 1_040_730, 14_310_975L,
             "56751049149f3df1ed134fdbc5e667ec57655f445edde5820ef9d9fed6697fcc",
-            1_692_576_000_000L, 1_787_270_340_000L)
+            1_692_576_000_000L, 1_787_270_340_000L),
+        Expected(10, 3_402_126, 43_314_146L,
+            "c0e5c8d2151605db8d0cf1c75f3f1d6cca0ecc5304bad233f536ffe45d7f7881",
+            1_471_820_400_000L, 1_787_270_340_000L)
     )
 
     private fun datasetFile(years: Int): File? = listOf(
@@ -48,7 +51,7 @@ class RepositoryMultiYearDataTest {
     }
 
     @Test
-    fun `two and three year downloads have valid data and stable hashes`() {
+    fun `two three and ten year downloads have valid data and stable hashes`() {
         for (expected in cases) {
             val file = datasetFile(expected.years)
                 ?: error("دیتاست ${expected.years} ساله در پوشهٔ datasets پیدا نشد")

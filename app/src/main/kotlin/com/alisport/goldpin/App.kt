@@ -23,7 +23,7 @@ import java.util.concurrent.Executors
  *
  * دو نشست **کاملاً جدا** هستند و هیچ‌وقت داده‌شان قاطی نمی‌شود:
  *  • [LIVE]     — دادهٔ فید شبکه، فایل `goldpin_state.json.gz`، سرویس زنده روشن.
- *  • [INTERNAL] — دادهٔ یک‌سالهٔ M1 دانلودشده و جدا از APK، فایل `goldpin_backtest.json.gz`،
+ *  • [INTERNAL] — دیتاست M1 انتخاب‌شده (۱/۲/۳/۱۰ سال) جدا از APK و با نتیجهٔ مستقل هر بازه،
  *                 فید و سرویس زنده **خاموش**.
  *
  * دلیل جداسازی: «مرج کردن» دو فید در یک سری، سه مشکل واقعی می‌ساخت —
@@ -294,8 +294,11 @@ class AppState {
 
     /** ساخت و انتشار اتمیک snapshot — باید بلافاصله بعد از هر تغییر وضعیت صدا زده شود. */
     private fun publishSnapshot() {
+        // دادهٔ ده‌ساله primitive-backed و پس از بارگذاری تغییرناپذیر است؛ کپی کامل آن
+        // به List<Candle> چندصد مگابایت موقت مصرف می‌کند. برای بازه‌های دیگر همان snapshot کپی می‌ماند.
+        val candleSnapshot = if (sessionMode == SessionMode.INTERNAL && activeBacktestYears == 10) candles else candles.toList()
         snap = UiSnapshot(
-            candles.toList(), engine.zones.toList(), engine.markers.toList(), engine.setups.toList(),
+            candleSnapshot, engine.zones.toList(), engine.markers.toList(), engine.setups.toList(),
             engine.events.toList(), broker.orders.toList(), broker.trades.toList(),
             broker.openTrade, broker.pendingOrder, broker.openTrades, broker.pendingOrders,
             engine.lastPocPx, engine.lastEntryPx,
@@ -329,7 +332,8 @@ class AppState {
         sessionMode = try {
             SessionMode.valueOf(p.getString("session_mode", SessionMode.LIVE.name) ?: SessionMode.LIVE.name)
         } catch (e: Exception) { SessionMode.LIVE }
-        selectedBacktestYears = p.getInt("backtest_years", 1).takeIf { it in 1..3 } ?: 1
+        selectedBacktestYears = p.getInt("backtest_years", 1)
+            .takeIf { years -> Feed.BACKTEST_DATASETS.any { it.years == years } } ?: 1
         activeBacktestYears = selectedBacktestYears
         // مهاجرت ۱٫۱ → ۱٫۲: تمام‌صفحهٔ خودکار دیگر پیش‌فرض نیست؛ تنظیم قدیمی true را یک‌بار خاموش کن.
         val uiVersion = p.getInt("ui_prefs_version", 0)
@@ -506,8 +510,8 @@ class AppState {
     // ── تنظیمات و بازسازی ──────────────────────────────────────────────────────
     /** بازسازی غیرهمزمان؛ تغییرات تنظیمات هرگز نخ رابط را قفل نمی‌کنند. */
     fun rebuildAsync() {
-        // ⚠ در نشست بک‌تست داخلی، هر تغییر تنظیم یعنی اجرای دوبارهٔ موتور روی ۳۵۲ هزار کندل
-        // (۲۸ ثانیه روی دسکتاپ، ۱–۲ دقیقه روی گوشی). پس به‌جای بازسازی خودکار، نتیجه «کهنه»
+        // ⚠ در نشست بک‌تست داخلی، هر تغییر تنظیم یعنی اجرای دوبارهٔ موتور روی کل بازهٔ انتخابی
+        // (در ۱۰ سال حدود ۳٫۴ میلیون کندل). پس به‌جای بازسازی خودکار، نتیجه «کهنه»
         // علامت می‌خورد و دکمهٔ «اجرای مجدد بک‌تست» روشن می‌شود.
         if (sessionMode == SessionMode.INTERNAL) {
             backtestStale = true
@@ -543,7 +547,7 @@ class AppState {
     fun rebuild() {
         if (sessionMode == SessionMode.INTERNAL) {
             // در نشست داخلی، بازسازی خودکار ممنوع است؛ نتیجه فقط با اجرای کامل روی
-            // دادهٔ یک‌ساله (runInternalBacktest) ساخته می‌شود.
+            // دیتاست انتخاب‌شده (runInternalBacktest) ساخته می‌شود.
             backtestStale = true
             Log.w(Log.CAT_ENGINE, "درخواست بازسازی در نشست داخلی رد شد — نتیجه کهنه علامت خورد")
             notifyUi()
@@ -1832,7 +1836,7 @@ class AppState {
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    //  نشست بک‌تست داخلی (طرح B) — دادهٔ یک‌سالهٔ M1 با حجم، جدا از فید زنده
+    //  نشست بک‌تست داخلی (طرح B) — دیتاست M1 انتخاب‌شده با حجم، جدا از فید زنده
     //
     //  چرا نشست جدا و نه «مرج»: دیتاست آزاد و فید زنده دو فید متفاوت‌اند
     //  (اختلاف قیمت میانه −۰٫۱۶۵ دلار و مقیاس حجم ≈۲۵٬۰۰۰ برابر — اندازه‌گیری‌شده).
@@ -1986,7 +1990,7 @@ class AppState {
     }
 
     /**
-     * اجرای کامل موتور روی دیتاست انتخاب‌شدهٔ یک تا سه‌ساله — با گزارش پیشرفت.
+     * اجرای کامل موتور روی دیتاست انتخاب‌شدهٔ ۱/۲/۳/۱۰ساله — با گزارش پیشرفت.
      *
      * `feed` را قطعه‌قطعه صدا می‌زنیم تا نوار پیشرفت واقعی باشد؛ `feed` از `processed`
      * ادامه می‌دهد، پس نه کندلی دوبار پردازش می‌شود و نه کندلی جا می‌افتد. کندل آخر
@@ -2038,6 +2042,7 @@ class AppState {
             zoneKeepKey = ""
             broker.reset()
             engine.reset()
+            engine.reserveTimeCapacity(mode.size)
             engine.broker = broker
             broker.engine = engine
             engine.barCommitHook = { cd -> broker.onBar(cd, live = false) }
@@ -2155,7 +2160,7 @@ class AppState {
             }
             activeBacktestYears = years
             val spec = Feed.backtestDataset(years)
-            Storage.dataFile(ctx, years).inputStream().use { Feed.parseCsvStream(it, spec.bars) }
+            Storage.dataFile(ctx, years).inputStream().use { Feed.parseBacktestStream(it, spec) }
         } catch (e: Exception) {
             activeBacktestYears = previousActiveYears
             backtestProgress = -1f
@@ -2191,7 +2196,7 @@ class AppState {
                 } else {
                     activeBacktestYears = years
                     val spec = Feed.backtestDataset(years)
-                    val raw = Storage.dataFile(ctx, years).inputStream().use { Feed.parseCsvStream(it, spec.bars) }
+                    val raw = Storage.dataFile(ctx, years).inputStream().use { Feed.parseBacktestStream(it, spec) }
                     msg = runInternalBlocking(ctx, raw)
                 }
             } catch (e: Exception) {
@@ -2399,7 +2404,7 @@ class AppState {
 
     companion object {
         /** نسخهٔ نمایشی — تنها منبع حقیقت برای هدر لاگ. با `versionName` در build.gradle یکی نگه دارید. */
-        const val APP_VERSION = "1.4.44"
+        const val APP_VERSION = "1.4.45"
 
         val instance = AppState()
 

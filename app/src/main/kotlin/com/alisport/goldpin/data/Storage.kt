@@ -31,14 +31,16 @@ object Storage {
 
     fun autoFile(ctx: Context): File = File(dir(ctx), FILE_NAME)
 
+    private val supportedBacktestYears = setOf(1, 2, 3, 10)
+
     fun internalFile(ctx: Context, years: Int = 1): File {
-        require(years in 1..3) { "بازهٔ داده باید ۱ تا ۳ سال باشد" }
+        require(years in supportedBacktestYears) { "بازهٔ داده پشتیبانی نمی‌شود: $years سال" }
         val name = if (years == 1) INTERNAL_FILE_NAME else "goldpin_backtest_${years}y.json.gz"
         return File(dir(ctx), name)
     }
 
     fun dataFile(ctx: Context, years: Int = 1): File {
-        require(years in 1..3) { "بازهٔ داده باید ۱ تا ۳ سال باشد" }
+        require(years in supportedBacktestYears) { "بازهٔ داده پشتیبانی نمی‌شود: $years سال" }
         val name = if (years == 1) DATA_FILE_NAME else "goldpin_xauusd_m1_${years}y.csv.gz"
         return File(dir(ctx), name)
     }

@@ -1401,8 +1401,8 @@ class MainActivity : Activity() {
     /**
      * بخش «داده و نشست» — کلید روشن/خاموش تاریخچهٔ داخلی (طرح B).
      *
-     * دو نشست کاملاً جدا: «زنده» با فید شبکه و فایل خودش، «بک‌تست داخلی» با دادهٔ یک‌سالهٔ
-     * M1 که جداگانه دانلود می‌شود و فایل نشست خودش. دیتاست‌های ۲/۳ ساله فقط در مخزن هستند.
+     * دو نشست کاملاً جدا: «زنده» با فید شبکه و فایل خودش، «بک‌تست داخلی» با دیتاست انتخابی
+     * M1 (۱/۲/۳/۱۰ سال) که جداگانه دانلود می‌شود و نتیجهٔ مستقل خودش را دارد.
      */
     private fun addBacktestSection(v: LinearLayout) {
         v.addView(Ui.section(this, "⓪-ب داده و نشست (بک‌تست داخلی)"))
@@ -1416,7 +1416,7 @@ class MainActivity : Activity() {
 
         v.addView(Ui.tv(this, "بازهٔ بک‌تست طلا (M1):", 10.5f, Palette.dim, true))
         val choices = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        for (y in 1..3) {
+        for (y in listOf(1, 2, 3, 10)) {
             val ready = s.hasBacktestData(this, y)
             val label = (if (ready) "✓ " else "") + "${Fa.d(y.toString())} سال"
             choices.addView(Ui.btn(this, label,
@@ -1456,6 +1456,7 @@ class MainActivity : Activity() {
                 AlertDialog.Builder(this@MainActivity)
                     .setTitle("دانلود دادهٔ بک‌تست")
                     .setMessage("دادهٔ ${Fa.d(years.toString())} سالهٔ M1 با ${Fa.d(spec.bars.toString())} کندل (حدود ${Fa.n(spec.bytesGz / 1048576.0, 1)} مگابایت فشرده) از مخزن ST دانلود می‌شود. فایل داخل APK نیست.\n" +
+                        (if (years == 10) "اجرای بک‌تست این بازه به‌دلیل حدود ۳٫۴ میلیون کندل ممکن است چندین دقیقه طول بکشد.\n" else "") +
                         "بعد از دانلود، نشست بک‌تست داخلی را روشن کنید؛ اگر همین نشست فعال است، اجرای مجدد را بزنید.")
                     .setPositiveButton("دانلود") { _, _ ->
                         toast("دانلود دادهٔ ${Fa.d(years.toString())} ساله آغاز شد…")
