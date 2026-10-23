@@ -121,6 +121,16 @@ class AppState {
     var sessionMode: SessionMode = SessionMode.LIVE
         private set
 
+    /** بازه‌ای که کاربر برای بک‌تست انتخاب کرده؛ نتیجه‌های هر بازه جداگانه ذخیره می‌شوند. */
+    @Volatile
+    var selectedBacktestYears: Int = 1
+        private set
+
+    /** بازه‌ای که داده‌اش همین حالا در موتور/چارت بارگذاری شده است. */
+    @Volatile
+    var activeBacktestYears: Int = 1
+        private set
+
     /** تنظیمات یا تایم‌فریم‌ها بعد از آخرین اجرای بک‌تست عوض شده‌اند ⇒ نتیجه کهنه است. */
     @Volatile
     var backtestStale: Boolean = false
@@ -155,6 +165,9 @@ class AppState {
 
     /** امضای تنظیمات فعلی. */
     fun backtestSignature(): String = signatureOf(cfg)
+
+    /** نتیجهٔ نشست داخلی علاوه بر تنظیمات باید به بازهٔ دیتاست هم وابسته باشد. */
+    private fun backtestResultSignature(): String = "${backtestSignature()}/datasetYears=$activeBacktestYears"
 
 
     /**
@@ -316,6 +329,8 @@ class AppState {
         sessionMode = try {
             SessionMode.valueOf(p.getString("session_mode", SessionMode.LIVE.name) ?: SessionMode.LIVE.name)
         } catch (e: Exception) { SessionMode.LIVE }
+        selectedBacktestYears = p.getInt("backtest_years", 1).takeIf { it in 1..3 } ?: 1
+        activeBacktestYears = selectedBacktestYears
         // مهاجرت ۱٫۱ → ۱٫۲: تمام‌صفحهٔ خودکار دیگر پیش‌فرض نیست؛ تنظیم قدیمی true را یک‌بار خاموش کن.
         val uiVersion = p.getInt("ui_prefs_version", 0)
         autoFullscreen = if (uiVersion < 2) false else p.getBoolean("auto_fullscreen", false)
@@ -1585,7 +1600,7 @@ class AppState {
             modeCandles.isNotEmpty() -> modeCandles
             else -> candles
         }
-        val btMeta = if (sessionMode == SessionMode.INTERNAL) backtestSignature() else ""
+        val btMeta = if (sessionMode == SessionMode.INTERNAL) backtestResultSignature() else ""
         return synchronized(stateLock) {
             Store.save(
                 cfg, engine, broker, persistedCandles,
@@ -1835,65 +1850,86 @@ class AppState {
 
     /** فایل نشست فعال (زنده یا بک‌تست). */
     private fun sessionFile(ctx: Context): File =
-        if (sessionMode == SessionMode.INTERNAL) Storage.internalFile(ctx) else Storage.autoFile(ctx)
+        if (sessionMode == SessionMode.INTERNAL) Storage.internalFile(ctx, activeBacktestYears) else Storage.autoFile(ctx)
 
-    /** دادهٔ یک‌ساله فقط پس از دانلود در حافظهٔ اپ در دسترس است؛ داخل APK بسته‌بندی نمی‌شود. */
-    fun hasBacktestData(ctx: Context): Boolean {
-        val f = Storage.dataFile(ctx)
+    /** انتخاب بازهٔ دیتاست؛ اگر در بک‌تست باشیم، اجرای قبلی کهنه علامت می‌خورد. */
+    fun selectBacktestYears(ctx: Context, years: Int): String {
+        if (Feed.BACKTEST_DATASETS.none { it.years == years }) return "بازهٔ بک‌تست پشتیبانی نمی‌شود"
+        if (selectedBacktestYears == years) return "بازهٔ ${Fa.d(years.toString())} سال همین حالا انتخاب شده است"
+        selectedBacktestYears = years
+        try { ctx.getSharedPreferences("goldpin", Context.MODE_PRIVATE).edit()
+            .putInt("backtest_years", years).apply() } catch (_: Exception) { }
+        if (sessionMode == SessionMode.INTERNAL && activeBacktestYears != years) backtestStale = true
+        notifyUi()
+        return "بازهٔ ${Fa.d(years.toString())} سال انتخاب شد" +
+            if (hasBacktestData(ctx, years)) " — آمادهٔ اجرای بک‌تست" else " — ابتدا داده را دانلود کنید"
+    }
+
+    /** آیا فایل بازهٔ انتخابی (یا بازهٔ درخواستی) روی گوشی موجود است؟ */
+    fun hasBacktestData(ctx: Context, years: Int = selectedBacktestYears): Boolean {
+        val f = Storage.dataFile(ctx, years)
         return f.exists() && f.length() > 1_000_000
     }
 
-    /** متن وضعیت دادهٔ بک‌تست برای نمایش در تنظیمات. */
-    fun backtestDataText(ctx: Context): String {
-        val f = Storage.dataFile(ctx)
-        val bars = Fa.d(Feed.BACKTEST_DATA_BARS.toString())
+    /** وضعیت فایل داده برای نمایش در تنظیمات. */
+    fun backtestDataText(ctx: Context, years: Int = selectedBacktestYears): String {
+        val spec = Feed.backtestDataset(years)
+        val f = Storage.dataFile(ctx, years)
+        val bars = Fa.d(spec.bars.toString())
         if (f.exists() && f.length() > 1_000_000) {
             val mb = f.length() / 1048576.0
-            return "دادهٔ یک‌ساله دانلود شده · ${Fa.n(mb, 2)} مگابایت · $bars کندل M1"
+            return "${Fa.d(years.toString())} سال دانلود شده · ${Fa.n(mb, 2)} مگابایت · $bars کندل M1"
         }
-        return "دادهٔ یک‌ساله دانلود نشده است · بیرون APK و در مخزن برای دریافت موجود است"
+        val mb = spec.bytesGz / 1048576.0
+        return "${Fa.d(years.toString())} سال دانلود نشده · حدود ${Fa.n(mb, 1)} مگابایت · $bars کندل M1"
     }
 
-    /** دانلود دادهٔ یک‌ساله از مخزن عمومی با بررسی هش و نصب اتمیک. */
-    fun downloadBacktestData(ctx: Context, onDone: (String) -> Unit = {}) {
+    /** دانلود بازهٔ انتخابی از مخزن عمومی با بررسی SHA-256. */
+    fun downloadBacktestData(ctx: Context, years: Int = selectedBacktestYears, onDone: (String) -> Unit = {}) {
+        val spec = try { Feed.backtestDataset(years) } catch (e: Exception) {
+            main.post { onDone("بازهٔ انتخابی معتبر نیست: ${e.message}") }
+            return
+        }
         io.execute {
             busy = true
-            busyText = "دانلود دادهٔ بک‌تست…"
+            busyText = "دانلود دادهٔ ${Fa.d(years.toString())} ساله…"
             backtestProgress = 0f
             notifyUi()
             var msg: String
             try {
-                val part = Storage.dataPartFile(ctx)
+                val part = Storage.dataPartFile(ctx, years)
                 if (part.exists()) part.delete()
                 val onProgress: (Long, Long) -> Unit = { got, total ->
                     backtestProgress = if (total > 0) (got.toFloat() / total) else -1f
                     busyText = if (total > 0)
-                        "دانلود دادهٔ بک‌تست: ${(got * 100 / total)}٪ (${Fa.n(got / 1048576.0, 1)} از ${Fa.n(total / 1048576.0, 1)} مگابایت)"
-                    else "دانلود دادهٔ بک‌تست: ${Fa.n(got / 1048576.0, 1)} مگابایت"
+                        "دانلود ${Fa.d(years.toString())} ساله: ${(got * 100 / total)}٪ (${Fa.n(got / 1048576.0, 1)} از ${Fa.n(total / 1048576.0, 1)} مگابایت)"
+                    else "دانلود ${Fa.d(years.toString())} ساله: ${Fa.n(got / 1048576.0, 1)} مگابایت"
                     notifyUi()
                 }
                 try {
-                    Feed.downloadTo(Feed.BACKTEST_DATA_URL, part, onProgress)
+                    Feed.downloadTo(spec.url, part, onProgress)
                 } catch (primaryError: Exception) {
-                    // تا این نسخهٔ تغییرات به GitHub برسد، از همان یک‌سالهٔ منتشرشدهٔ قبلی استفاده کن.
+                    val fallback = spec.fallbackUrl
+                    if (fallback == null) throw primaryError
                     part.delete()
-                    Log.w(Log.CAT_FEED, "دانلود از مسیر دیتاست ریپو ناموفق؛ تلاش با Release قبلی",
+                    Log.w(Log.CAT_FEED, "دانلود دیتاست ریپو ناموفق؛ تلاش با Release قبلی",
                         primaryError.message ?: "")
-                    Feed.downloadTo(Feed.BACKTEST_DATA_FALLBACK_URL, part, onProgress)
+                    Feed.downloadTo(fallback, part, onProgress)
                 }
                 val hash = Feed.sha256(part)
-                if (!hash.equals(Feed.BACKTEST_DATA_SHA256, ignoreCase = true)) {
+                if (!hash.equals(spec.sha256, ignoreCase = true)) {
                     part.delete()
-                    throw FeedException("هش فایل داده مطابق انتظار نیست (دانلود ناقص) — دوباره تلاش کنید")
+                    throw FeedException("هش فایل ${years} ساله با مقدار معتبر نمی‌خواند — دوباره تلاش کنید")
                 }
-                val dest = Storage.dataFile(ctx)
+                val dest = Storage.dataFile(ctx, years)
                 if (dest.exists()) dest.delete()
                 if (!part.renameTo(dest)) { part.copyTo(dest, overwrite = true); part.delete() }
-                msg = "دادهٔ بک‌تست ذخیره شد: ${Fa.n(dest.length() / 1048576.0, 2)} مگابایت"
-                Log.i(Log.CAT_FEED, "دادهٔ بک‌تست دانلود شد", "بایت=${dest.length()} هش=${hash.take(12)}…")
+                msg = "دادهٔ ${Fa.d(years.toString())} ساله ذخیره شد: ${Fa.n(dest.length() / 1048576.0, 2)} مگابایت · ${Fa.d(spec.bars.toString())} کندل"
+                Log.i(Log.CAT_FEED, "دادهٔ بک‌تست دانلود شد",
+                    "سال=$years بایت=${dest.length()} هش=${hash.take(12)}…")
             } catch (e: Exception) {
                 Log.e(Log.CAT_FEED, "دانلود دادهٔ بک‌تست ناموفق", e)
-                msg = "خطای دانلود داده: ${e.message}"
+                msg = "خطای دانلود دادهٔ ${years} ساله: ${e.message}"
             } finally {
                 backtestProgress = -1f
                 busy = false
@@ -1903,14 +1939,14 @@ class AppState {
         }
     }
 
-    /** پاک کردن فایل دادهٔ بک‌تست (برای آزاد کردن ۵ مگابایت). */
-    fun deleteBacktestData(ctx: Context): String {
+    /** پاک کردن دیتاست انتخاب‌شده (نتیجهٔ بک‌تست حذف نمی‌شود). */
+    fun deleteBacktestData(ctx: Context, years: Int = selectedBacktestYears): String {
         var n = 0
-        for (f in listOf(Storage.dataFile(ctx), Storage.dataPartFile(ctx))) {
+        for (f in listOf(Storage.dataFile(ctx, years), Storage.dataPartFile(ctx, years))) {
             if (f.exists() && f.delete()) n++
         }
         notifyUi()
-        return if (n > 0) "دادهٔ یک‌ساله از حافظهٔ اپ پاک شد — برای بک‌تست دوباره دانلودش کنید"
+        return if (n > 0) "دادهٔ ${Fa.d(years.toString())} ساله از حافظهٔ اپ پاک شد — برای اجرای دوباره دانلودش کنید"
                else "فایلی برای پاک کردن نبود"
     }
 
@@ -1942,7 +1978,7 @@ class AppState {
         val zones = engine.zones
         val lv = engine.t1Zones.size      // باکس‌های تریگر۱ (LV/ولوم کم)
         val hv = engine.t2Zones.size      // باکس‌های تریگر۲ (HV/ولوم زیاد)
-        return "کندل=${Fa.d(engine.processed.toString())} · ناحیه=${Fa.d(zones.size.toString())} " +
+        return "داده=${Fa.d(activeBacktestYears.toString())} سال M1 · پردازش=${Fa.d(engine.processed.toString())} · ناحیه=${Fa.d(zones.size.toString())} " +
             "(فعال=${Fa.d(zones.count { it.status == ZoneStatus.ACTIVE }.toString())}) · " +
             "LV=${Fa.d(lv.toString())} · HV=${Fa.d(hv.toString())} · " +
             "سفارش=${Fa.d(broker.orders.size.toString())} · معامله=${Fa.d(broker.trades.size.toString())} · " +
@@ -1950,7 +1986,7 @@ class AppState {
     }
 
     /**
-     * اجرای کامل موتور روی دادهٔ یک‌ساله — با گزارش پیشرفت.
+     * اجرای کامل موتور روی دیتاست انتخاب‌شدهٔ یک تا سه‌ساله — با گزارش پیشرفت.
      *
      * `feed` را قطعه‌قطعه صدا می‌زنیم تا نوار پیشرفت واقعی باشد؛ `feed` از `processed`
      * ادامه می‌دهد، پس نه کندلی دوبار پردازش می‌شود و نه کندلی جا می‌افتد. کندل آخر
@@ -2049,7 +2085,7 @@ class AppState {
 
     /** بازیابی نشست داخلی ذخیره‌شده + خواندن کندل‌ها از فایل داده. */
     private fun restoreInternalBlocking(ctx: Context, raw: List<Candle>): String {
-        val f = Storage.internalFile(ctx)
+        val f = Storage.internalFile(ctx, activeBacktestYears)
         if (!f.exists()) return runInternalBlocking(ctx, raw)
         busyText = "بازیابی نتیجهٔ بک‌تست…"
         notifyUi()
@@ -2059,9 +2095,10 @@ class AppState {
         // اگر مود/استراتژی/پارامترها از آخرین اجرا عوض شده باشد، نتیجهٔ ذخیره‌شده دیگر
         // پاسخِ همین تنظیمات نیست. پیش‌تر فقط هشدار «کهنه» نشان داده می‌شد و کاربر پیام
         // می‌گرفت که بک‌تست تغییرات را نمی‌گیرد؛ حالا خودکار با تنظیمات تازه اجرا می‌شود.
-        if (savedSig.isNotEmpty() && savedSig != backtestSignature()) {
-            Log.i(Log.CAT_ENGINE, "تنظیمات از آخرین بک‌تست عوض شده → اجرای مجدد خودکار",
-                "قدیم=${savedSig.take(40)}… جدید=${backtestSignature().take(40)}…")
+        val legacyOneYearSig = activeBacktestYears == 1 && savedSig == backtestSignature()
+        if (savedSig.isNotEmpty() && savedSig != backtestResultSignature() && !legacyOneYearSig) {
+            Log.i(Log.CAT_ENGINE, "تنظیمات یا بازهٔ داده از آخرین بک‌تست عوض شده → اجرای مجدد خودکار",
+                "قدیم=${savedSig.take(40)}… جدید=${backtestResultSignature().take(40)}…")
             return runInternalBlocking(ctx, raw)
         }
         internalRaw = raw
@@ -2104,18 +2141,23 @@ class AppState {
      * بارگذاری کامل نشست داخلی (روی نخ IO). اگر فایل نشست نباشد، بک‌تست اجرا می‌شود.
      */
     private fun loadInternalBlocking(ctx: Context): String {
+        val years = selectedBacktestYears
+        val previousActiveYears = activeBacktestYears
         busy = true
-        busyText = "خواندن دادهٔ یک‌ساله…"
+        busyText = "خواندن دادهٔ ${Fa.d(years.toString())} ساله…"
         backtestProgress = 0f
         notifyUi()
         val raw = try {
-            if (!hasBacktestData(ctx)) {
+            if (!hasBacktestData(ctx, years)) {
                 backtestProgress = -1f
                 busy = false; busyText = ""
-                return "دادهٔ یک‌ساله هنوز دانلود نشده است — ابتدا از تنظیمات دانلود کنید"
+                return "دادهٔ ${Fa.d(years.toString())} ساله هنوز دانلود نشده است — ابتدا از تنظیمات دانلود کنید"
             }
-            Storage.dataFile(ctx).inputStream().use { Feed.parseCsvStream(it) }
+            activeBacktestYears = years
+            val spec = Feed.backtestDataset(years)
+            Storage.dataFile(ctx, years).inputStream().use { Feed.parseCsvStream(it, spec.bars) }
         } catch (e: Exception) {
+            activeBacktestYears = previousActiveYears
             backtestProgress = -1f
             busy = false; busyText = ""
             return "خطای خواندن دادهٔ بک‌تست: ${e.message}"
@@ -2137,18 +2179,23 @@ class AppState {
             return
         }
         io.execute {
+            val years = selectedBacktestYears
+            val previousActiveYears = activeBacktestYears
             busy = true
-            busyText = "خواندن دادهٔ یک‌ساله…"
+            busyText = "خواندن دادهٔ ${Fa.d(years.toString())} ساله…"
             notifyUi()
             var msg = ""
             try {
-                if (!hasBacktestData(ctx)) {
-                    msg = "دادهٔ یک‌ساله هنوز دانلود نشده است — ابتدا از تنظیمات دانلود کنید"
+                if (!hasBacktestData(ctx, years)) {
+                    msg = "دادهٔ ${Fa.d(years.toString())} ساله هنوز دانلود نشده است — ابتدا از تنظیمات دانلود کنید"
                 } else {
-                    val raw = Storage.dataFile(ctx).inputStream().use { Feed.parseCsvStream(it) }
+                    activeBacktestYears = years
+                    val spec = Feed.backtestDataset(years)
+                    val raw = Storage.dataFile(ctx, years).inputStream().use { Feed.parseCsvStream(it, spec.bars) }
                     msg = runInternalBlocking(ctx, raw)
                 }
             } catch (e: Exception) {
+                activeBacktestYears = previousActiveYears
                 Log.e(Log.CAT_ENGINE, "اجرای بک‌تست ناموفق", e)
                 msg = "خطای بک‌تست: ${e.message}"
             } finally {
@@ -2168,8 +2215,8 @@ class AppState {
      * بارگذاری می‌شود. پس هیچ‌وقت وضعیت زنده با دادهٔ بک‌تست جای‌گزین نمی‌شود.
      */
     fun switchSession(ctx: Context, target: SessionMode, onDone: (String) -> Unit = {}) {
-        if (target == SessionMode.INTERNAL && !hasBacktestData(ctx)) {
-            main.post { onDone("دادهٔ یک‌ساله داخل اپ نیست؛ ابتدا از تنظیمات آن را دانلود کنید") }
+        if (target == SessionMode.INTERNAL && !hasBacktestData(ctx, selectedBacktestYears)) {
+            main.post { onDone("دادهٔ ${Fa.d(selectedBacktestYears.toString())} ساله دانلود نشده است — ابتدا از تنظیمات دانلود کنید") }
             return
         }
         if (target == sessionMode) {
@@ -2185,6 +2232,7 @@ class AppState {
                 saveToAutoFile(ctx)            // نشست فعلی، در فایل خودش
                 resetStateForSession()
                 sessionMode = target
+                if (target == SessionMode.INTERNAL) activeBacktestYears = selectedBacktestYears
                 backtestStale = false
                 backtestInfo = ""
                 // هنگام بازگشت به زنده، تنظیماتِ فعلیِ کاربر حفظ می‌شود (applySettings=false)
@@ -2270,7 +2318,7 @@ class AppState {
                 // پس همان تنظیم آزموده‌شده با داده ([Tuned]) می‌نشیند تا اپ از همان اول با کارمزد
                 // ۰٫۷ سفارش بدهد. اگر فایلی باشد، مهاجرت specRev در Store همان کار را فقط برای
                 // مقدارهای دست‌نخوردهٔ سند ۷ انجام می‌دهد و تنظیم دستی کاربر دست‌نخورده می‌ماند.
-                if (!Storage.autoFile(ctx).exists() && !Storage.internalFile(ctx).exists()) {
+                if (!Storage.autoFile(ctx).exists() && !Storage.internalFile(ctx, selectedBacktestYears).exists()) {
                     Tuned.apply(cfg)
                     Log.i(Log.CAT_CFG, "نصب تازه → تنظیم آزموده‌شده با داده اعمال شد",
                         "هدف=${Fa.n(cfg.trigger2TargetR, 1)}R بافرحدضرر=${Fa.n(cfg.slBufTicks, 0)}تیک " +
@@ -2351,7 +2399,7 @@ class AppState {
 
     companion object {
         /** نسخهٔ نمایشی — تنها منبع حقیقت برای هدر لاگ. با `versionName` در build.gradle یکی نگه دارید. */
-        const val APP_VERSION = "1.4.42"
+        const val APP_VERSION = "1.4.44"
 
         val instance = AppState()
 

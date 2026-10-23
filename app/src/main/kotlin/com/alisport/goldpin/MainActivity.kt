@@ -1407,75 +1407,112 @@ class MainActivity : Activity() {
     private fun addBacktestSection(v: LinearLayout) {
         v.addView(Ui.section(this, "⓪-ب داده و نشست (بک‌تست داخلی)"))
         val internal = s.sessionMode == SessionMode.INTERNAL
+        val years = s.selectedBacktestYears
+        val spec = Feed.backtestDataset(years)
         v.addView(Ui.tv(this,
             "نشست فعال: " + (if (internal) "بک‌تست داخلی — فید شبکه خاموش است"
                               else "زنده — فید شبکه و ذخیرهٔ خودکار"),
             11.5f, Palette.gold, true))
+
+        v.addView(Ui.tv(this, "بازهٔ بک‌تست طلا (M1):", 10.5f, Palette.dim, true))
+        val choices = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        for (y in 1..3) {
+            val ready = s.hasBacktestData(this, y)
+            val label = (if (ready) "✓ " else "") + "${Fa.d(y.toString())} سال"
+            choices.addView(Ui.btn(this, label,
+                if (y == years) Palette.accent else Palette.panel2,
+                if (y == years) Palette.bg else Palette.txt, 11f).apply {
+                setOnClickListener {
+                    toast(s.selectBacktestYears(applicationContext, y))
+                    showTab(4)
+                }
+            }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
+                marginEnd = Ui.dp(this@MainActivity, 4f)
+            })
+        }
+        v.addView(choices)
         v.addView(Ui.tv(this,
-            "دادهٔ بک‌تست: " + s.backtestDataText(this), 10.5f, Palette.dim))
-        v.addView(switchRow("تاریخچهٔ داخلی (یک سال M1 با حجم)", internal) { on ->
-            (if (on) SessionMode.INTERNAL else SessionMode.LIVE).let { target ->
-                toast(if (on) "رفتن به بک‌تست داخلی…" else "بازگشت به حالت زنده…")
-                s.switchSession(applicationContext, target) { msg ->
-                    runOnUiThread {
-                        AlertDialog.Builder(this)
-                            .setTitle(if (on) "بک‌تست داخلی" else "حالت زنده")
-                            .setMessage(msg).setPositiveButton("باشه", null).show()
-                        showTab(4)
-                    }
+            "وضعیت فایل انتخابی: ${s.backtestDataText(this, years)}", 10.5f, Palette.dim))
+
+        v.addView(switchRow("نشست بک‌تست داخلی (${Fa.d(years.toString())} سال M1)", internal) { on ->
+            val target = if (on) SessionMode.INTERNAL else SessionMode.LIVE
+            toast(if (on) "رفتن به بک‌تست ${Fa.d(years.toString())} ساله…" else "بازگشت به حالت زنده…")
+            s.switchSession(applicationContext, target) { msg ->
+                runOnUiThread {
+                    AlertDialog.Builder(this)
+                        .setTitle(if (on) "بک‌تست داخلی" else "حالت زنده")
+                        .setMessage(msg).setPositiveButton("باشه", null).show()
+                    showTab(4)
                 }
             }
         })
+
         val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        row.addView(Ui.btn(this, "دانلود دادهٔ یک‌ساله", Palette.panel2, Palette.txt, 11f).apply {
+        row.addView(Ui.btn(this,
+            if (s.hasBacktestData(this, years)) "دانلود دوبارهٔ دادهٔ ${Fa.d(years.toString())} ساله"
+            else "دانلود دادهٔ ${Fa.d(years.toString())} ساله",
+            Palette.panel2, Palette.txt, 11f).apply {
             setOnClickListener {
                 AlertDialog.Builder(this@MainActivity)
                     .setTitle("دانلود دادهٔ بک‌تست")
-                    .setMessage("دادهٔ یک‌سالهٔ M1 (۳۵۱٬۸۹۴ کندل با حجم، ۲۰۲۵-۰۸-۲۱ تا ۲۰۲۶-۰۸-۲۰) داخل APK نیست و باید یک‌بار دانلود شود (حدود ۴٫۹ مگابایت).\n" +
-                        "داده‌های ۲ و ۳ ساله جداگانه در پوشهٔ datasets مخزن هستند و داخل اپ بارگذاری نمی‌شوند.")
+                    .setMessage("دادهٔ ${Fa.d(years.toString())} سالهٔ M1 با ${Fa.d(spec.bars.toString())} کندل (حدود ${Fa.n(spec.bytesGz / 1048576.0, 1)} مگابایت فشرده) از مخزن ST دانلود می‌شود. فایل داخل APK نیست.\n" +
+                        "بعد از دانلود، نشست بک‌تست داخلی را روشن کنید؛ اگر همین نشست فعال است، اجرای مجدد را بزنید.")
                     .setPositiveButton("دانلود") { _, _ ->
-                        toast("دانلود آغاز شد…")
-                        s.downloadBacktestData(applicationContext) { msg ->
-                            runOnUiThread { AlertDialog.Builder(this@MainActivity).setTitle("نتیجه").setMessage(msg)
-                                .setPositiveButton("باشه", null).show(); showTab(4) }
+                        toast("دانلود دادهٔ ${Fa.d(years.toString())} ساله آغاز شد…")
+                        s.downloadBacktestData(applicationContext, years) { msg ->
+                            runOnUiThread {
+                                AlertDialog.Builder(this@MainActivity).setTitle("نتیجهٔ دانلود").setMessage(msg)
+                                    .setPositiveButton("باشه", null).show()
+                                showTab(4)
+                            }
                         }
                     }.setNegativeButton("نه", null).show()
             }
         })
-        if (s.hasBacktestData(this)) {
+        if (s.hasBacktestData(this, years)) {
             row.addView(Ui.btn(this, "حذف داده", Palette.panel2, Palette.down, 11f).apply {
                 setOnClickListener {
                     AlertDialog.Builder(this@MainActivity).setTitle("حذف دادهٔ بک‌تست؟")
-                        .setMessage("فایل دادهٔ یک‌ساله از حافظهٔ اپ پاک می‌شود (نتیجهٔ بک‌تست در فایل نشست می‌ماند). " +
-                            "برای اجرای دوباره باید فایل را مجدداً از مخزن دانلود کنید.")
-                        .setPositiveButton("بله") { _, _ -> toast(s.deleteBacktestData(applicationContext)); showTab(4) }
+                        .setMessage("فایل دادهٔ ${Fa.d(years.toString())} ساله از حافظهٔ اپ پاک می‌شود. نتیجهٔ ذخیره‌شدهٔ آن بازه باقی می‌ماند.")
+                        .setPositiveButton("بله") { _, _ ->
+                            toast(s.deleteBacktestData(applicationContext, years))
+                            showTab(4)
+                        }
                         .setNegativeButton("نه", null).show()
                 }
             })
         }
         v.addView(row)
+
         if (internal) {
-            if (s.backtestStale) {
-                v.addView(Ui.tv(this, "⚠ تنظیمات از آخرین اجرا عوض شده — نتیجه کهنه است؛ دوباره اجرا کنید.",
+            if (s.backtestStale || years != s.activeBacktestYears) {
+                v.addView(Ui.tv(this, "⚠ بازه یا تنظیمات از اجرای فعلی فرق دارد؛ برای بارگذاری بازهٔ انتخابی اجرای مجدد را بزنید.",
                     11f, Palette.down, true))
             }
-            v.addView(Ui.btn(this, "اجرای مجدد بک‌تست (۳۵۲ هزار کندل)", Palette.accent, Palette.bg, 11.5f).apply {
-                setOnClickListener {
-                    toast("اجرای بک‌تست آغاز شد…")
-                    s.runInternalBacktest(applicationContext) { msg ->
-                        runOnUiThread {
-                            AlertDialog.Builder(this@MainActivity).setTitle("بک‌تست داخلی").setMessage(msg)
-                                .setPositiveButton("باشه", null).show(); showTab(0)
+            if (s.hasBacktestData(this, years)) {
+                v.addView(Ui.btn(this,
+                    "اجرای مجدد بک‌تست (${Fa.d(years.toString())} سال · ${Fa.d(spec.bars.toString())} کندل)",
+                    Palette.accent, Palette.bg, 11.5f).apply {
+                    setOnClickListener {
+                        toast("بک‌تست ${Fa.d(years.toString())} ساله آغاز شد…")
+                        s.runInternalBacktest(applicationContext) { msg ->
+                            runOnUiThread {
+                                AlertDialog.Builder(this@MainActivity).setTitle("بک‌تست داخلی").setMessage(msg)
+                                    .setPositiveButton("باشه", null).show()
+                                showTab(0)
+                            }
                         }
                     }
-                }
-            })
+                })
+            } else {
+                v.addView(Ui.tv(this, "برای اجرای بازهٔ انتخابی، ابتدا فایل ${Fa.d(years.toString())} ساله را دانلود کنید.",
+                    10.5f, Palette.down))
+            }
             if (s.backtestInfo.isNotEmpty()) {
                 v.addView(Ui.tv(this, s.backtestInfo, 10.5f, Palette.dim))
             }
             v.addView(Ui.tv(this,
-                "در این حالت: دانلود تاریخچه، سرویس زنده و پر شدن سفارش با قیمت زنده خاموش‌اند؛ " +
-                    "چارت روی کل یک سال جابه‌جا (lookback) می‌شود و نواحی ساختار/LV/HV قابل بررسی‌اند.",
+                "در نشست داخلی، فید زنده و دانلود تاریخچه خاموش است. نتیجهٔ هر بازه جداگانه ذخیره می‌شود و فایل داده روی گوشی می‌ماند تا برای اجراهای بعدی دوباره دانلود نشود.",
                 10f, Palette.dim))
         }
     }

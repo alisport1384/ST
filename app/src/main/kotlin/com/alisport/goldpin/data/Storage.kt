@@ -19,9 +19,9 @@ import java.util.zip.GZIPOutputStream
 object Storage {
 
     const val FILE_NAME = "goldpin_state.json.gz"
-    /** نشست بک‌تست داخلی — جدا از فایل زنده تا هیچ‌وقت با فید شبکه قاطی نشود (طرح B). */
+    /** فایل نتیجهٔ بک‌تست یک‌ساله (نام قدیمی حفظ شده تا ذخیره‌های قبلی بازیابی شوند). */
     const val INTERNAL_FILE_NAME = "goldpin_backtest.json.gz"
-    /** فایل دادهٔ یک‌سالهٔ M1 دانلودشده در حافظهٔ اپ (دیتاست‌ها بیرون APK هستند). */
+    /** نام فایل دادهٔ یک‌سالهٔ دانلودشده؛ بازه‌های بلندتر از الگوی همان نام ساخته می‌شوند. */
     const val DATA_FILE_NAME = "goldpin_xauusd_m1_1y.csv.gz"
 
     fun dir(ctx: Context): File {
@@ -31,12 +31,20 @@ object Storage {
 
     fun autoFile(ctx: Context): File = File(dir(ctx), FILE_NAME)
 
-    fun internalFile(ctx: Context): File = File(dir(ctx), INTERNAL_FILE_NAME)
+    fun internalFile(ctx: Context, years: Int = 1): File {
+        require(years in 1..3) { "بازهٔ داده باید ۱ تا ۳ سال باشد" }
+        val name = if (years == 1) INTERNAL_FILE_NAME else "goldpin_backtest_${years}y.json.gz"
+        return File(dir(ctx), name)
+    }
 
-    fun dataFile(ctx: Context): File = File(dir(ctx), DATA_FILE_NAME)
+    fun dataFile(ctx: Context, years: Int = 1): File {
+        require(years in 1..3) { "بازهٔ داده باید ۱ تا ۳ سال باشد" }
+        val name = if (years == 1) DATA_FILE_NAME else "goldpin_xauusd_m1_${years}y.csv.gz"
+        return File(dir(ctx), name)
+    }
 
     /** فایل موقت دانلود داده؛ فقط بعد از تأیید هش به نام نهایی تغییر نام می‌دهد. */
-    fun dataPartFile(ctx: Context): File = File(dir(ctx), DATA_FILE_NAME + ".part")
+    fun dataPartFile(ctx: Context, years: Int = 1): File = File(dir(ctx), dataFile(ctx, years).name + ".part")
 
     /**
      * نوشتن اتمیک وضعیت: ابتدا در فایل موقت، سپس جای‌گزینی با فایل اصلی.

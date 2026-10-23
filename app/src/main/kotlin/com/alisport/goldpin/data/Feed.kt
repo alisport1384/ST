@@ -28,6 +28,15 @@ import javax.net.ssl.HttpsURLConnection
 
 class FeedException(msg: String) : Exception(msg)
 
+data class BacktestDatasetSpec(
+    val years: Int,
+    val bars: Int,
+    val bytesGz: Long,
+    val sha256: String,
+    val url: String,
+    val fallbackUrl: String? = null
+)
+
 object Feed {
 
     const val SYMBOL_DEFAULT = "GC=F"
@@ -561,16 +570,34 @@ object Feed {
         return BufferedReader(InputStreamReader(ins, Charsets.UTF_8)).use { it.readText() }
     }
 
-    // ── دادهٔ بک‌تست داخلی (طرح B) ─────────────────────────────────────────────
-    // دیتاست‌ها بیرون APK و در پوشهٔ datasets مخزن هستند. داخل اپ فقط دادهٔ یک‌ساله
-    // دانلود می‌شود؛ نسخه‌های ۲/۳ ساله برای دانلود دستی در خود مخزن باقی می‌مانند.
+    // ── دیتاست‌های بک‌تست داخلی (طرح B) ────────────────────────────────────────
+    // فایل‌های یک‌، دو و سه‌ساله بیرون APK در ریپوی عمومی ST قرار دارند.
     const val BACKTEST_DATA_URL =
         "https://raw.githubusercontent.com/alisport1384/ST/main/datasets/goldpin_xauusd_m1_1y.csv.gz"
-    /** سازگاری موقت تا زمانی که فایل‌های همین ریپو push شوند؛ همان فایل و همان هش یک‌ساله است. */
     const val BACKTEST_DATA_FALLBACK_URL =
         "https://github.com/alisport1384/ST1/releases/download/data-v1/goldpin_xauusd_m1_1y.csv.gz"
     const val BACKTEST_DATA_SHA256 = "15fffd94b9c1970080d6012ff2aa3ae307d18a872381c677e44d16b5fd08db44"
     const val BACKTEST_DATA_BARS = 351_894
+    const val BACKTEST_DATA_2Y_URL =
+        "https://raw.githubusercontent.com/alisport1384/ST/main/datasets/goldpin_xauusd_m1_2y.csv.gz"
+    const val BACKTEST_DATA_2Y_SHA256 = "873d4ffc765723abfada8ef55fbf8b9bb9c7432125187395972f51af94496e9f"
+    const val BACKTEST_DATA_2Y_BARS = 701_067
+    const val BACKTEST_DATA_3Y_URL =
+        "https://raw.githubusercontent.com/alisport1384/ST/main/datasets/goldpin_xauusd_m1_3y.csv.gz"
+    const val BACKTEST_DATA_3Y_SHA256 = "56751049149f3df1ed134fdbc5e667ec57655f445edde5820ef9d9fed6697fcc"
+    const val BACKTEST_DATA_3Y_BARS = 1_040_730
+
+    val BACKTEST_DATASETS = listOf(
+        BacktestDatasetSpec(1, BACKTEST_DATA_BARS, 5_128_001L, BACKTEST_DATA_SHA256,
+            BACKTEST_DATA_URL, BACKTEST_DATA_FALLBACK_URL),
+        BacktestDatasetSpec(2, BACKTEST_DATA_2Y_BARS, 9_844_331L, BACKTEST_DATA_2Y_SHA256,
+            BACKTEST_DATA_2Y_URL),
+        BacktestDatasetSpec(3, BACKTEST_DATA_3Y_BARS, 14_310_975L, BACKTEST_DATA_3Y_SHA256,
+            BACKTEST_DATA_3Y_URL)
+    )
+
+    fun backtestDataset(years: Int): BacktestDatasetSpec = BACKTEST_DATASETS.firstOrNull { it.years == years }
+        ?: throw FeedException("بازهٔ بک‌تست پشتیبانی نمی‌شود: $years سال")
 
     /**
      * خواندن CSV کندل به‌صورت **جریانی** (بدون ساخت رشتهٔ کامل).
@@ -579,15 +606,18 @@ object Feed {
      * و بعد لیست را دوباره می‌ساخت. برای یک سال M1 این روی گوشی‌های ضعیف به OOM می‌خورد.
      * این نسخه خط‌به‌خط می‌خواند و فقط لیست نهایی را نگه می‌دارد.
      */
-    fun parseCsvStream(stream: java.io.InputStream): List<Candle> {
+    fun parseCsvStream(stream: java.io.InputStream, expectedBars: Int = BACKTEST_DATA_BARS): List<Candle> {
         val buffered = java.io.BufferedInputStream(stream, 1 shl 16)
         buffered.mark(4)
         val b0 = buffered.read(); val b1 = buffered.read()
         buffered.reset()
         val isGz = b0 == 0x1f && b1 == 0x8b
         val ins = if (isGz) GZIPInputStream(buffered) else buffered
-        val out = ArrayList<Candle>(BACKTEST_DATA_BARS)
+        // برای ۳ سال، حذف لیست میانی جلوی کپی هم‌زمانِ بیش از یک میلیون Candle را می‌گیرد.
+        val out = ArrayList<Candle>(expectedBars.coerceIn(16, 2_000_000))
         var first = true
+        var previousTime = Long.MIN_VALUE
+        var monotonic = true
         BufferedReader(InputStreamReader(ins, Charsets.UTF_8), 1 shl 16).use { br ->
             while (true) {
                 val raw = br.readLine() ?: break
@@ -606,16 +636,20 @@ object Feed {
                 val c = p[4].trim().toDoubleOrNull() ?: continue
                 val v = if (p.size >= 6) (p[5].trim().toDoubleOrNull() ?: 0.0) else 0.0
                 val ms = if (t < 100_000_000_000L) t * 1000L else t
-                out.add(Candle(0, ms, o, h, l, c, v))
+                if (ms < previousTime) monotonic = false
+                previousTime = ms
+                out.add(Candle(out.size, ms, o, h, l, c, v))
             }
         }
         if (out.isEmpty()) throw FeedException("فایل دادهٔ بک‌تست خوانده نشد")
-        if (out.size > 1 && out[0].t > out[out.size - 1].t) out.sortBy { it.t }
-        val res = ArrayList<Candle>(out.size)
-        for ((i, c) in out.withIndex()) res.add(Candle(i, c.t, c.o, c.h, c.l, c.c, c.v))
+        if (!monotonic) out.sortBy { it.t }
+        for (i in out.indices) {
+            val c = out[i]
+            if (c.bi != i) out[i] = Candle(i, c.t, c.o, c.h, c.l, c.c, c.v)
+        }
         Log.i(Log.CAT_FEED, "دادهٔ بک‌تست خوانده شد",
-            "کندل=${res.size} حجم‌دار=${res.any { it.v > 0 }}")
-        return res
+            "کندل=${out.size} حجم‌دار=${out.any { it.v > 0 }} مرتب=${monotonic}")
+        return out
     }
 
     /** دانلود فایل دادهٔ بک‌تست با گزارش پیشرفت (بایت دریافتی از کل). */
