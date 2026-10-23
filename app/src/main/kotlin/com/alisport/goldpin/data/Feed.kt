@@ -565,7 +565,7 @@ object Feed {
     // دیتاست‌ها بیرون APK و در پوشهٔ datasets مخزن هستند. داخل اپ فقط دادهٔ یک‌ساله
     // دانلود می‌شود؛ نسخه‌های ۲/۳ ساله برای دانلود دستی در خود مخزن باقی می‌مانند.
     const val BACKTEST_DATA_URL =
-        "https://raw.githubusercontent.com/alisport1384/ST2/main/datasets/goldpin_xauusd_m1_1y.csv.gz"
+        "https://raw.githubusercontent.com/alisport1384/ST/main/datasets/goldpin_xauusd_m1_1y.csv.gz"
     /** سازگاری موقت تا زمانی که فایل‌های همین ریپو push شوند؛ همان فایل و همان هش یک‌ساله است. */
     const val BACKTEST_DATA_FALLBACK_URL =
         "https://github.com/alisport1384/ST1/releases/download/data-v1/goldpin_xauusd_m1_1y.csv.gz"

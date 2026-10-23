@@ -41,9 +41,9 @@ python3 tools/build_sample.py --src /path/XAUUSD_OHLCV_1M.csv \
 
 بعد از push این تغییرات، لینک‌های خام زیر مستقیم دانلود می‌شوند:
 
-- ۱ سال: `https://raw.githubusercontent.com/alisport1384/ST2/main/datasets/goldpin_xauusd_m1_1y.csv.gz`
-- ۲ سال: `https://raw.githubusercontent.com/alisport1384/ST2/main/datasets/goldpin_xauusd_m1_2y.csv.gz`
-- ۳ سال: `https://raw.githubusercontent.com/alisport1384/ST2/main/datasets/goldpin_xauusd_m1_3y.csv.gz`
+- ۱ سال: `https://raw.githubusercontent.com/alisport1384/ST/main/datasets/goldpin_xauusd_m1_1y.csv.gz`
+- ۲ سال: `https://raw.githubusercontent.com/alisport1384/ST/main/datasets/goldpin_xauusd_m1_2y.csv.gz`
+- ۳ سال: `https://raw.githubusercontent.com/alisport1384/ST/main/datasets/goldpin_xauusd_m1_3y.csv.gz`
 
 > دادهٔ ۲ و ۳ ساله برای بررسی و دانلود آماده است؛ اما اجرای مستقیم این دو بازه از داخل اپ
 > در این تغییر پیاده‌سازی نشده است. نسخهٔ قابل اجرای داخل اپ همچنان یک‌ساله و جدا از فایل‌های طولانی‌تر است.
