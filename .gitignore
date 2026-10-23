@@ -1,0 +1,18 @@
+# ساخت
+build/
+.gradle/
+*.iml
+.idea/
+local.properties
+captures/
+.externalNativeBuild/
+.cxx/
+
+# خروجی‌های سنگین
+*.apk.bak
+/data/
+
+# دادهٔ خام دانلودی (قابل بازتولید با اسکریپت‌های dl_*.py)
+scenario/xau_m1.csv
+scenario/xau_m1_b.csv
+scenario/__pycache__/

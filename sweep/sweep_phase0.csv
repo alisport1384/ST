@@ -1,0 +1,2 @@
+tag,strategy,mm,fade,cmsn,k,costMult,nMax,tpUnits,riskPct,minTP,slip,slBuf,entryBuf,trades,wins,winRate,avgR,net,profitFactor,maxDD,finalEquity,orders,costBlocked,nBlocked,posMonths,months,seconds
+s1-Mixe-fade-k4.0-c0.0-N3.0,1,Mixed,true,0.7,4.0,0.0,3.0,10.0,1.0,10.0,1.0,2.0,1.0,392,63,16.07,-0.6730,-4464.50,0.476,4625.60,95535.50,444,0,42315,1,2025-08:-24|2025-09:-327|2025-10:-402|2025-11:-345|2025-12:-464|2026-01:-456|2026-02:-409|2026-03:-454|2026-04:99|2026-05:-249|2026-06:-386|2026-07:-548|2026-08:-499,15.6

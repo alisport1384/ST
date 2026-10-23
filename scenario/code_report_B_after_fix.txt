@@ -1,0 +1,89 @@
+═══ گزارش کد (موتور GoldPin) روی سناریوی کنترل‌شده ═══
+کندل‌های M1: 810 · ساختار H1 · میانی M15 · تریگر۱ M5 · تریگر۲ M1
+mintick=0.01 slBuf=2tick entryBuf=1tick N=3 leverage=500 risk=1% equity=100000 contract=1
+
+ساختار @ 02:00 · روند=0 · HH=NaN HL=NaN LL=NaN LH=NaN · highestBE=NaN lowestBUpin=NaN · pinBU=NaN(act=false) pinBE=NaN(act=false)
+ساختار @ 03:00 · روند=0 · HH=NaN HL=NaN LL=NaN LH=NaN · highestBE=NaN lowestBUpin=NaN · pinBU=NaN(act=false) pinBE=NaN(act=false)
+ساختار @ 04:00 · روند=0 · HH=NaN HL=NaN LL=NaN LH=NaN · highestBE=NaN lowestBUpin=NaN · pinBU=NaN(act=false) pinBE=NaN(act=false)
+ساختار @ 05:00 · روند=0 · HH=NaN HL=NaN LL=NaN LH=NaN · highestBE=NaN lowestBUpin=1999.00 · pinBU=1999.00(act=true) pinBE=NaN(act=false)
+ساختار @ 06:00 · روند=0 · HH=NaN HL=NaN LL=NaN LH=NaN · highestBE=NaN lowestBUpin=1999.00 · pinBU=1999.00(act=true) pinBE=NaN(act=false)
+ساختار @ 07:00 · روند=0 · HH=NaN HL=NaN LL=NaN LH=NaN · highestBE=2010.20 lowestBUpin=1999.00 · pinBU=1999.00(act=true) pinBE=2010.20(act=true)
+ساختار @ 08:00 · روند=1 · HH=NaN HL=NaN LL=NaN LH=NaN · highestBE=2010.20 lowestBUpin=1999.00 · pinBU=1999.00(act=true) pinBE=2010.20(act=false)
+   پروفایل کندل ۰۸:۰۰ · lo=2003.5000 step=0.3750 rows=24 · poc=2003.6875
+   ردیف‌ها (کف→سقف): 300.00 291.00 282.00 273.00 264.00 255.00 246.00 237.00 228.00 219.00 210.00 201.00 192.00 183.00 174.00 165.00 156.00 147.00 138.00 129.00 120.00 111.00 102.00 93.00
+ساختار @ 09:00 · روند=1 · HH=NaN HL=NaN LL=NaN LH=NaN · highestBE=2010.20 lowestBUpin=1999.00 · pinBU=1999.00(act=true) pinBE=2010.20(act=false)
+ستاپ #0 @ 09:00 · stage -1→0 (منتظر برخورد به ناحیهٔ ساختار) · z=[2012.20..2013.20] mid=NaN lv=[NaN..NaN] hv=[NaN..NaN] entry=NaN sl=NaN tp1=NaN tp2=NaN tpx=NaN note=ثبت شد
+ساختار @ 10:00 · روند=1 · HH=NaN HL=NaN LL=NaN LH=NaN · highestBE=2010.20 lowestBUpin=1999.00 · pinBU=1999.00(act=true) pinBE=2010.20(act=false)
+ساختار @ 11:00 · روند=1 · HH=NaN HL=NaN LL=NaN LH=NaN · highestBE=2010.20 lowestBUpin=1999.00 · pinBU=1999.00(act=true) pinBE=2010.20(act=false)
+ساختار @ 12:00 · روند=1 · HH=2022.00 HL=1999.00 LL=NaN LH=NaN · highestBE=2022.00 lowestBUpin=1999.00 · pinBU=1999.00(act=true) pinBE=2022.00(act=true)
+ساختار @ 13:00 · روند=1 · HH=2022.00 HL=1999.00 LL=NaN LH=NaN · highestBE=2022.00 lowestBUpin=1999.00 · pinBU=1999.00(act=true) pinBE=2022.00(act=true)
+ستاپ #0 @ 13:14 · stage 0→1 (برخورد شد · منتظر بسته شدن کندل میانی) · z=[2012.20..2013.20] mid=NaN lv=[NaN..NaN] hv=[NaN..NaN] entry=NaN sl=NaN tp1=NaN tp2=NaN tpx=NaN note=ثبت شد
+ستاپ #0 @ 13:30 · stage 1→2 (تایید میانی ✔) · z=[2012.20..2013.20] mid=2012.00 lv=[NaN..NaN] hv=[NaN..NaN] entry=NaN sl=NaN tp1=NaN tp2=NaN tpx=NaN note=ثبت شد
+ستاپ #0 @ 13:45 · stage 2→3 (اسکن ناحیهٔ ولوم کم (تریگر۱)) · z=[2012.20..2013.20] mid=2012.00 lv=[NaN..NaN] hv=[NaN..NaN] entry=NaN sl=NaN tp1=NaN tp2=NaN tpx=NaN note=ثبت شد
+ساختار @ 14:00 · روند=1 · HH=2022.00 HL=1999.00 LL=NaN LH=NaN · highestBE=2022.00 lowestBUpin=1999.00 · pinBU=1999.00(act=true) pinBE=2022.00(act=true)
+ستاپ #0 @ 14:05 · stage 3→4 (ولوم کم ✔ · اسکن ولوم زیاد (تریگر۲)) · z=[2012.20..2013.20] mid=2012.00 lv=[2012.60..2013.15] hv=[NaN..NaN] entry=NaN sl=NaN tp1=NaN tp2=NaN tpx=NaN note=ناحیهٔ ساختار مصرف شد — ستاپ تا ابطال تایید میانی فعال است
+ستاپ #0 @ 14:11 · stage 4→5 (کندل ولوم زیاد (تریگر۲) مارک شد) · z=[2012.20..2013.20] mid=2012.00 lv=[2012.60..2013.15] hv=[2012.70..2013.20] entry=NaN sl=NaN tp1=NaN tp2=NaN tpx=NaN note=ناحیهٔ ساختار مصرف شد — ستاپ تا ابطال تایید میانی فعال است
+ستاپ #0 @ 14:14 · stage 5→6 (مسلح (Armed) · منتظر برگشت به ناحیهٔ ولوم زیاد) · z=[2012.20..2013.20] mid=2012.00 lv=[2012.60..2013.15] hv=[2012.70..2013.20] entry=2013.21 sl=2012.68 tp1=2015.82 tp2=2017.00 tpx=2024.72 note=ناحیهٔ ساختار مصرف شد — ستاپ تا ابطال تایید میانی فعال است
+ستاپ #0 @ 14:16 · stage 6→7 (در معامله) · z=[2012.20..2013.20] mid=2012.00 lv=[2012.60..2013.15] hv=[2012.70..2013.20] entry=2013.21 sl=2012.68 tp1=2015.82 tp2=2017.00 tpx=2024.72 note=ناحیهٔ ساختار مصرف شد — ستاپ تا ابطال تایید میانی فعال است
+ساختار @ 15:00 · روند=1 · HH=2022.00 HL=1999.00 LL=NaN LH=NaN · highestBE=2022.00 lowestBUpin=1999.00 · pinBU=1999.00(act=true) pinBE=2022.00(act=true)
+ستاپ #1 @ 15:00 · stage -1→0 (منتظر برخورد به ناحیهٔ ساختار) · z=[2013.08..2013.64] mid=NaN lv=[NaN..NaN] hv=[NaN..NaN] entry=NaN sl=NaN tp1=NaN tp2=NaN tpx=NaN note=ثبت شد
+ستاپ #2 @ 15:00 · stage -1→0 (منتظر برخورد به ناحیهٔ ساختار) · z=[2013.64..2014.01] mid=NaN lv=[NaN..NaN] hv=[NaN..NaN] entry=NaN sl=NaN tp1=NaN tp2=NaN tpx=NaN note=ثبت شد
+ستاپ #0 @ 15:20 · stage 7→8 (پایان‌یافته) · z=[2012.20..2013.20] mid=2012.00 lv=[2012.60..2013.15] hv=[2012.70..2013.20] entry=2013.21 sl=2013.21 tp1=2015.82 tp2=2017.00 tpx=2024.72 note=حد سود نهایی (1.272)
+
+── پروفایل حجم کندل ساختار ۰۸:۰۰ (۲۴ ردیف، از کف به سقف) ──
+آخرین پروفایل محاسبه‌شده در پایان اجرا (برای مرجع): rows=24
+باکس ناحیه: dir=1 Z1 top=2013.20 bot=2012.20 createdT=08:00 status=4 rows=6-10
+باکس ناحیه: dir=1 Z1 top=2013.64 bot=2013.08 createdT=14:00 status=0 rows=2-4
+باکس ناحیه: dir=1 Z2 top=2014.01 bot=2013.64 createdT=14:00 status=0 rows=5-6
+ناحیه‌های تریگر۱: 1 · ناحیه‌های تریگر۲: 1
+  LV box: [2012.60 .. 2013.15] createdT=13:50 status=4
+  HV box: [2012.70 .. 2013.20] createdT=14:11 status=4
+
+── سفارش‌ها ──
+سفارش #0 setup=0 dir=1 price=2013.2100 sl=2012.6800 tp1=2015.8200 tp2=2017.0000 tpX=2024.7200 qty=1886.7925 hvTop=2013.2000 hvBot=2012.7000 status=1 placed=14:14 filled=14:16 cancel=null
+
+── معاملات ──
+معامله #0 dir=1 entry=2013.2100 sl0=2012.6800 tp1=2015.8200 tp2=2017.0000 tpX=2024.7200 qty=1886.7925 entryT=14:16 exitT=15:20 exitPx=2024.7200 reason=حد سود نهایی (1.272) gross=11368.6792 pnl=11368.6792 R=11.3687
+    پله: ENTRY t=14:16 px=2013.2100 qty=1886.7925 pnl=0.0000
+    پله: TP1 t=14:40 px=2015.8200 qty=622.6415 pnl=1625.0943
+    پله: TP2 t=14:55 px=2017.0000 qty=622.6415 pnl=2359.8113
+    پله: TPX t=15:20 px=2024.7200 qty=641.5094 pnl=7383.7736
+
+── جمع‌بندی موتور ──
+شمارنده‌ها: ستاپ=3 برخورد=1 میانی=2 LV=1 HV=1 ورود=1 پایان=1
+موجودی نهایی=111368.6792 · equity=111368.6792 · معاملات=1 · سفارش‌ها=1
+
+── لاگ کامل موتور (به ترتیب) ──
+[ENGINE] کاندید کندل مهم پایین‌ترین‌ها ثبت شد | kind=BU hi=2008.00 lo=1999.00 ref=2005.05 bar=60
+[ENGINE] Ready BU (pinBU) تایید شد | lo=1999.00 hi=2008.00 bar=120
+[ENGINE] کاندید کندل مهم بالاترین‌ها ثبت شد | kind=BE hi=2010.20 lo=2005.50 ref=2009.50 bar=180
+[ENGINE] Ready BE (pinBE) تایید شد | hi=2010.20 lo=2005.50 bar=240
+[ENGINE] روند صعودی تثبیت شد (توالی) | tempBoxTop=2010.20 tempBoxBot=1999.00 close=2012.10
+[ZONE] ناحیهٔ فیکس‌رنج ثبت شد · Z1 | dir=BULL top=2013.20 bot=2012.20 rows=6-10 bar=360 setup=0
+[ENGINE] کاندید کندل مهم بالاترین‌ها ثبت شد | kind=BE hi=2022.00 lo=2016.00 ref=2019.00 bar=480
+[ENGINE] Ready BE (pinBE) تایید شد | hi=2022.00 lo=2016.00 bar=540
+[ENGINE] HH / HL تعریف شد | HH=2022.00 HL=1999.00 bar=540
+[ENGINE] برخورد قیمت با ناحیهٔ ساختار · ستاپ #0 | zone=2012.20-2013.20 bar=674 · منتظر تایید میانی (15m)
+[ENGINE] تایید میانی انجام شد · ستاپ #0 | کف تایید=2013.18 bar=660
+[ENGINE] تایید میانی باطل شد · ستاپ #0 | سطح قبلی=2013.18 bar=675 · تریگر۲
+[ENGINE] تایید میانی انجام شد · ستاپ #0 | کف تایید=2012.00 bar=675
+[ENGINE] کندل ولوم کم مارک شد · ستاپ #0 | vol=400.00 < prev=500.00 hi=2013.15 lo=2012.60 bar=710
+[ZONE] ناحیهٔ ساختار پس از لمس و گذشت یک کندل ساختار کامل باطل شد · ستاپ #0 | zone=2012.20-2013.20 stage=3 bar=720
+[ENGINE] ناحیهٔ ولوم کم تایید شد · ستاپ #0 | box=2012.60-2013.15 bar=720 مرحله=4
+[ENGINE] بازگشت به باکس ولوم کم → اسکن ناحیهٔ ولوم زیاد فعال شد · ستاپ #0 | box=2012.60-2013.15 bar=726 vol=64.00
+[ENGINE] کندل ولوم زیاد مارک شد · ستاپ #0 | vol=300.00 hi=2013.20 lo=2012.70 bar=731 مرحله=5
+[ORDER/B] سفارش ورود ثبت شد (آماده) · ستاپ #0 | type=BUY_LIMIT price=2013.21 sl=2012.68 tp1=2015.82 tp2=2017.00 tp=2024.72 qty=1886.79 active=0+1/1 bar=734
+[ENGINE] ناحیهٔ ولوم زیاد تایید شد → ستاپ مسلح (Armed) · ستاپ #0 | dir=BUY ورود=2013.21 SL=2012.68 TP1=2015.82 TP2=2017.00 TP=2024.72 bar=734
+[ZONE] باکس ولوم کم 1 بار از سهمیهٔ خود را مصرف کرد · ستاپ #0 | box=2012.60-2013.15 bar=730
+[TRADE] قیمت به ناحیهٔ ولوم زیاد برگشت (شرط ورود) · ستاپ #0 | ورود=2013.21 bar=736
+[TRADE/B] سفارش پر شد → ورود انجام شد · معامله #0 | dir=BUY entry=2013.21 sl=2012.68 tp=2024.72 qty=1886.79 bar=736
+[ZONE] باکس ولوم کم هنگام معامله 2 بار مصرف شد · ستاپ #0 | box=2012.60-2013.15 bar=735
+[TRADE] TP1 (۳۸٪) لمس شد → حدضرر به سر‌به‌سر منتقل شد · ستاپ #0 | tp1=2015.82 bar=760
+[TRADE/B] پلهٔ خروج TP1 اجرا شد · معامله #0 | px=2015.82 qty=622.64 pnl=1625.09 سود/زیان معامله تاکنون=1625.09
+[TRADE] TP2 (۵۰٪) لمس شد · ستاپ #0 | tp2=2017.00 bar=775
+[TRADE/B] پلهٔ خروج TP2 اجرا شد · معامله #0 | px=2017.00 qty=622.64 pnl=2359.81 سود/زیان معامله تاکنون=3984.91
+[ENGINE] کاندید کندل مهم پایین‌ترین‌ها ثبت شد | kind=BU hi=2013.65 lo=2012.00 ref=2013.05 bar=720
+[ZONE] ناحیهٔ فیکس‌رنج ثبت شد · Z1 | dir=BULL top=2013.64 bot=2013.08 rows=2-4 bar=720 setup=1
+[ZONE] ناحیهٔ فیکس‌رنج ثبت شد · Z2 | dir=BULL top=2014.01 bot=2013.64 rows=5-6 bar=720 setup=2
+[TRADE] پایان معامله · ستاپ #0 → حد سود نهایی (1.272) | خروج=2024.72 bar=800
+[TRADE/B] معامله #0 بسته شد | reason=حد سود نهایی (1.272) exit=2024.72 pnl=11368.68 R=11.37 موجودی=111368.68

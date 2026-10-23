@@ -1,0 +1,16 @@
+V7 defaults (N=10, Fib anchor fixed)
+win mode            n     WR%     expR   equity     DD%
+C   doc5-fib       99    13.1   +0.556    1.51x   31.9
+C   v7-fade4R      85    28.2   +0.315    1.01x    0.3
+C   v7-nofade4R    86    25.6   +0.159    1.00x    0.3
+B   doc5-fib      113     9.7   +0.723    1.46x   49.3
+B   v7-fade4R      84    28.6   +0.320    1.00x    0.2
+B   v7-nofade4R    84    22.6   -0.000    1.00x    0.5
+A   doc5-fib      148     2.0   -0.814    0.32x   69.4
+A   v7-fade4R      89    25.8   +0.174    1.00x    0.5
+A   v7-nofade4R    88    14.8   -0.379    0.99x    0.6
+
+— جمع —
+doc5-fib     n= 360 WR=  7.5% expR=  +0.045
+v7-fade4R    n= 258 WR= 27.5% expR=  +0.268
+v7-nofade4R  n= 258 WR= 20.9% expR=  -0.076
