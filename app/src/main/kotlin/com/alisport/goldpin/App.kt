@@ -23,7 +23,7 @@ import java.util.concurrent.Executors
  *
  * دو نشست **کاملاً جدا** هستند و هیچ‌وقت داده‌شان قاطی نمی‌شود:
  *  • [LIVE]     — دادهٔ فید شبکه، فایل `goldpin_state.json.gz`، سرویس زنده روشن.
- *  • [INTERNAL] — دیتاست M1 انتخاب‌شده (۱/۲/۳/۱۰ سال) جدا از APK و با نتیجهٔ مستقل هر بازه،
+ *  • [INTERNAL] — دیتاست M1 انتخاب‌شده (۱/۲/۳/۱۰/۲۰ سال) جدا از APK و با نتیجهٔ مستقل هر بازه،
  *                 فید و سرویس زنده **خاموش**.
  *
  * دلیل جداسازی: «مرج کردن» دو فید در یک سری، سه مشکل واقعی می‌ساخت —
@@ -296,7 +296,7 @@ class AppState {
     private fun publishSnapshot() {
         // دادهٔ ده‌ساله primitive-backed و پس از بارگذاری تغییرناپذیر است؛ کپی کامل آن
         // به List<Candle> چندصد مگابایت موقت مصرف می‌کند. برای بازه‌های دیگر همان snapshot کپی می‌ماند.
-        val candleSnapshot = if (sessionMode == SessionMode.INTERNAL && activeBacktestYears == 10) candles else candles.toList()
+        val candleSnapshot = if (sessionMode == SessionMode.INTERNAL && activeBacktestYears >= 10) candles else candles.toList()
         snap = UiSnapshot(
             candleSnapshot, engine.zones.toList(), engine.markers.toList(), engine.setups.toList(),
             engine.events.toList(), broker.orders.toList(), broker.trades.toList(),
@@ -511,7 +511,7 @@ class AppState {
     /** بازسازی غیرهمزمان؛ تغییرات تنظیمات هرگز نخ رابط را قفل نمی‌کنند. */
     fun rebuildAsync() {
         // ⚠ در نشست بک‌تست داخلی، هر تغییر تنظیم یعنی اجرای دوبارهٔ موتور روی کل بازهٔ انتخابی
-        // (در ۱۰ سال حدود ۳٫۴ میلیون کندل). پس به‌جای بازسازی خودکار، نتیجه «کهنه»
+        // (در ۱۰ سال حدود ۶٫۶ میلیون کندل). پس به‌جای بازسازی خودکار، نتیجه «کهنه»
         // علامت می‌خورد و دکمهٔ «اجرای مجدد بک‌تست» روشن می‌شود.
         if (sessionMode == SessionMode.INTERNAL) {
             backtestStale = true
@@ -1810,6 +1810,7 @@ class AppState {
         dst.prevT1Vol = src.prevT1Vol; dst.prevChartVol = src.prevChartVol
         dst.zoneSeq = src.zoneSeq; dst.setupSeq = src.setupSeq; dst.processed = src.processed
         dst.curBi = src.curBi; dst.curT = src.curT
+        dst.rebuildActiveZoneIndex()
     }
 
     private fun copyAgg(s: Agg, d: Agg) {
@@ -1990,7 +1991,7 @@ class AppState {
     }
 
     /**
-     * اجرای کامل موتور روی دیتاست انتخاب‌شدهٔ ۱/۲/۳/۱۰ساله — با گزارش پیشرفت.
+     * اجرای کامل موتور روی دیتاست انتخاب‌شدهٔ ۱/۲/۳/۱۰/۲۰ساله — با گزارش پیشرفت.
      *
      * `feed` را قطعه‌قطعه صدا می‌زنیم تا نوار پیشرفت واقعی باشد؛ `feed` از `processed`
      * ادامه می‌دهد، پس نه کندلی دوبار پردازش می‌شود و نه کندلی جا می‌افتد. کندل آخر
@@ -2404,7 +2405,7 @@ class AppState {
 
     companion object {
         /** نسخهٔ نمایشی — تنها منبع حقیقت برای هدر لاگ. با `versionName` در build.gradle یکی نگه دارید. */
-        const val APP_VERSION = "1.4.45"
+        const val APP_VERSION = "1.4.46"
 
         val instance = AppState()
 

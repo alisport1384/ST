@@ -22,7 +22,7 @@ class StorageBundledDataTest {
     @Test
     fun backtestDatasetsAreNotBundledInApk() {
         val names = RuntimeEnvironment.getApplication().assets.list("").orEmpty().toSet()
-        for (years in listOf(1, 2, 3, 10)) {
+        for (years in listOf(1, 2, 3, 10, 20)) {
             assertFalse("Compressed ${years}-year dataset must stay outside the APK",
                 names.contains("goldpin_xauusd_m1_${years}y.csv.gz"))
         }
@@ -37,6 +37,7 @@ class StorageBundledDataTest {
         assertEquals("goldpin_xauusd_m1_2y.csv.gz", Storage.dataFile(ctx, 2).name)
         assertEquals("goldpin_xauusd_m1_3y.csv.gz", Storage.dataFile(ctx, 3).name)
         assertEquals("goldpin_xauusd_m1_10y.csv.gz", Storage.dataFile(ctx, 10).name)
+        assertEquals("goldpin_xauusd_m1_20y.csv.gz", Storage.dataFile(ctx, 20).name)
         assertNotEquals(Storage.dataFile(ctx, 1), Storage.dataFile(ctx, 2))
         assertNotEquals(Storage.dataPartFile(ctx, 2), Storage.dataPartFile(ctx, 3))
         // Keep the historical one-year result filename so existing saved runs remain readable.
@@ -44,6 +45,7 @@ class StorageBundledDataTest {
         assertEquals("goldpin_backtest_2y.json.gz", Storage.internalFile(ctx, 2).name)
         assertEquals("goldpin_backtest_3y.json.gz", Storage.internalFile(ctx, 3).name)
         assertEquals("goldpin_backtest_10y.json.gz", Storage.internalFile(ctx, 10).name)
+        assertEquals("goldpin_backtest_20y.json.gz", Storage.internalFile(ctx, 20).name)
         assertNotEquals(Storage.internalFile(ctx, 1), Storage.internalFile(ctx, 2))
     }
 
@@ -83,12 +85,29 @@ class StorageBundledDataTest {
     }
 
     @Test
-    fun datasetCatalogIncludesVerifiedOneTwoThreeAndTenYearRanges() {
-        assertEquals(listOf(1, 2, 3, 10), Feed.BACKTEST_DATASETS.map { it.years })
-        assertEquals(listOf(351_894, 701_067, 1_040_730, 3_402_126), Feed.BACKTEST_DATASETS.map { it.bars })
+    fun twentyYearRepositoryFileParsesAsPackedRandomAccessSeries() {
+        val file = listOf(
+            File("datasets/goldpin_xauusd_m1_20y.csv.gz"),
+            File("../datasets/goldpin_xauusd_m1_20y.csv.gz")
+        ).firstOrNull { it.isFile } ?: error("20-year dataset is missing from the repository")
+        val bars = file.inputStream().use { Feed.parseBacktestStream(it, Feed.backtestDataset(20)) }
+        assertEquals(6_563_723, bars.size)
+        assertEquals(1_156_118_520_000L, bars[0].t)
+        assertEquals(1_787_270_340_000L, bars.last().t)
+        assertEquals(613.70, bars[0].o, 0.00000001)
+        assertEquals(0, bars[0].bi)
+        assertEquals(bars.size - 1, bars.last().bi)
+        assertEquals(4523.95, bars.last().c, 0.00000001)
+    }
+
+    @Test
+    fun datasetCatalogIncludesVerifiedOneTwoThreeTenAndTwentyYearRanges() {
+        assertEquals(listOf(1, 2, 3, 10, 20), Feed.BACKTEST_DATASETS.map { it.years })
+        assertEquals(listOf(351_894, 701_067, 1_040_730, 3_402_126, 6_563_723), Feed.BACKTEST_DATASETS.map { it.bars })
         assertTrue(Feed.BACKTEST_DATASETS.all { it.sha256.length == 64 && it.url.startsWith("https://") })
         assertEquals(Feed.BACKTEST_DATA_FALLBACK_URL, Feed.backtestDataset(1).fallbackUrl)
         assertEquals(null, Feed.backtestDataset(2).fallbackUrl)
         assertEquals(43_314_146L, Feed.backtestDataset(10).bytesGz)
+        assertEquals(77_779_089L, Feed.backtestDataset(20).bytesGz)
     }
 }

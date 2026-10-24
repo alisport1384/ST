@@ -220,18 +220,59 @@ class Counters {
     var windowBlocked = 0
 }
 
+/** Fixed-capacity chronological storage: append and evict oldest in O(1). */
+class RollingHistory<T>(private val capacity: Int) : AbstractList<T>() {
+    private val values = arrayOfNulls<Any?>(capacity.coerceAtLeast(1))
+    private var head = 0
+    override var size: Int = 0
+        private set
+
+    @Suppress("UNCHECKED_CAST")
+    override fun get(index: Int): T {
+        if (index !in 0 until size) throw IndexOutOfBoundsException("index=$index size=$size")
+        return values[(head + index) % values.size] as T
+    }
+
+    fun add(value: T) {
+        if (size < values.size) {
+            values[(head + size) % values.size] = value
+            size++
+        } else {
+            values[head] = value
+            head = (head + 1) % values.size
+        }
+    }
+
+    fun addAll(elements: Collection<T>): Boolean {
+        for (element in elements) add(element)
+        return elements.isNotEmpty()
+    }
+
+    fun clear() {
+        java.util.Arrays.fill(values, null)
+        head = 0
+        size = 0
+    }
+}
+
 class Engine(val cfg: Settings) {
 
     // ── وضعیت ──────────────────────────────────────────────────────────────────
     val aggS = Agg(); val aggM = Agg(); val agg1 = Agg()
-    val structBars = ArrayList<Candle>()
+    val structBars = RollingHistory<Candle>(400)
     val pins = ArrayList<Pin>()
     val setups = ArrayList<Setup>()
     val microS = ArrayList<Candle>()
 
     val zones = ArrayList<ZoneBox>()          // همهٔ باکس‌های ساختار با چرخهٔ عمر (برای ذخیره/بازیابی دقیق)
+    private val activeZones = ArrayList<ZoneBox>()
     val t1Zones = ArrayList<ZoneBox>()        // باکس‌های تاییدشدهٔ تریگر ۱ (ولوم کم) در حافظه
     val t2Zones = ArrayList<ZoneBox>()        // باکس‌های تاییدشدهٔ تریگر ۲ (ولوم زیاد) در حافظه
+    private val activeT1Zones = ArrayList<ZoneBox>()
+    private val activeT2Zones = ArrayList<ZoneBox>()
+    private var indexedStructureZoneCount = 0
+    private var indexedT1ZoneCount = 0
+    private var indexedT2ZoneCount = 0
     val markers = ArrayList<Marker>()         // برچسب‌های استراتژی روی چارت
     val events = ArrayList<String>()          // گزارش رویدادها
     val cnt = Counters()
@@ -324,8 +365,8 @@ class Engine(val cfg: Settings) {
         val lowBi: Int,
         val highBi: Int
     )
-    internal val t2History = ArrayList<T2Bar>()
-    internal val t1History = ArrayList<T1Bar>()
+    internal val t2History = RollingHistory<T2Bar>(4000)
+    internal val t1History = RollingHistory<T1Bar>(1000)
 
     /** §18-22: سقف و کف کندل ساختار مرجع Y برای ابطال نواحی کندل‌های درونی X و X+n */
     var zoneRefH = Double.NaN
@@ -359,7 +400,9 @@ class Engine(val cfg: Settings) {
     fun reset() {
         aggS.reset(); aggM.reset(); agg1.reset()
         structBars.clear(); pins.clear(); setups.clear(); microS.clear()
-        zones.clear(); t1Zones.clear(); t2Zones.clear(); markers.clear(); events.clear()
+        zones.clear(); t1Zones.clear(); t2Zones.clear(); activeZones.clear(); activeT1Zones.clear(); activeT2Zones.clear()
+        indexedStructureZoneCount = 0; indexedT1ZoneCount = 0; indexedT2ZoneCount = 0
+        markers.clear(); events.clear()
         trend = 0; HH = Double.NaN; HL = Double.NaN; LL = Double.NaN; LH = Double.NaN
         tempBoxTop = Double.NaN; tempBoxBot = Double.NaN
         hlPinLo = Double.NaN; hlPinRef = Double.NaN; hlPinHi = Double.NaN; hlPinSeq = -1
@@ -392,6 +435,10 @@ class Engine(val cfg: Settings) {
         zoneRefH = Double.NaN; zoneRefL = Double.NaN
         livePreview.clear(); liveCandle = null
         times = LongArray(0)
+        compactTimesMinutes = null
+        compactTimeRemainderMs = Long.MIN_VALUE
+        lastFedCandle = null
+        lastFedIndex = -1
         seedTimes.clear()
     }
 
@@ -400,23 +447,29 @@ class Engine(val cfg: Settings) {
      * پردازش لیست کندل‌های تایم‌فریم تریگر۲ (چارت).
      * همهٔ کندل‌ها به‌جز آخری «بسته» در نظر گرفته می‌شوند؛ آخری فقط پیش‌نمایش زنده است.
      */
+    private var lastFedCandle: Candle? = null
+    private var lastFedIndex: Int = -1
+
     fun feed(candles: List<Candle>, lastIsClosed: Boolean = false) {
         if (candles.isEmpty()) return
         val lastIdx = candles.size - 1
         var i = processed
         while (i <= lastIdx) {
             val cd = candles[i]
+            val prev = if (lastFedIndex == i - 1) lastFedCandle else candles.getOrNull(i - 1)
             val isLast = i == lastIdx
             if (MarketHours.isClosed(cd.t)) {
                 // تعطیلات شنبه و یکشنبه (ساعت استاندارد بازار): کندل آخر هفته هیچ تصمیمی
                 // نمی‌سازد و وارد تجمیع هم نمی‌شود؛ فقط شمارنده جلو می‌رود تا دوباره دیده نشود.
                 // سشن یکشنبه‌شب (از ۲۲:۰۰ UTC) باز است و جزئی از دوشنبه حساب می‌شود.
                 processed = i + 1
+                lastFedCandle = cd; lastFedIndex = i
             } else if (!isLast || lastIsClosed) {
-                processClosed(cd, i, candles.getOrNull(i - 1))
+                processClosed(cd, i, prev)
                 processed = i + 1
+                lastFedCandle = cd; lastFedIndex = i
             } else {
-                updateLive(cd, i, candles.getOrNull(i - 1))
+                updateLive(cd, i, prev)
             }
             i++
         }
@@ -513,6 +566,7 @@ class Engine(val cfg: Settings) {
     private fun processClosed(cd: Candle, i: Int, prev: Candle?) {
         curBi = i; curT = cd.t; curVol = cd.v
         recordTime(i, cd.t)
+        ensureActiveZoneIndexes()
         val isNewS = Tf.isNewBarStart(tfS(), cd.t, prev?.t)
         val isNewM = Tf.isNewBarStart(tfM(), cd.t, prev?.t)
         val isNew1 = Tf.isNewBarStart(tf1(), cd.t, prev?.t)
@@ -537,7 +591,6 @@ class Engine(val cfg: Settings) {
                 }
             }
             t1History.add(T1Bar(q1, prevT1Vol, q1.bi, endBi, lowBi, highBi))
-            while (t1History.size > 1000) t1History.removeAt(0)
         }
 
         // ترتیب دقیقاً مثل Pine: ساختار → میانی → تریگر۱ → تریگر۲
@@ -603,7 +656,6 @@ class Engine(val cfg: Settings) {
         }
         if (agg1.closedNow) trigger1Engine(agg1.cl!!)
         t2History.add(T2Bar(cd, prevChartVol))
-        while (t2History.size > 4000) t2History.removeAt(0)
         trigger2Engine(cd)
 
         // ریزکندل‌های تریگر۲ داخل کندل ساختار جاری
@@ -613,13 +665,17 @@ class Engine(val cfg: Settings) {
 
         // چرخهٔ عمر باکس‌های ناحیه (حذف با کلوز از سمت دور)
         // §4-5: ابطال با کلوز سمت دور قانون استراتژی است، نه گزینهٔ قابل‌خاموش‌کردن.
-        for (zb in zones) {
-            if (zb.status != ZoneStatus.ACTIVE) continue
-            val dead = if (zb.dir == 1) cd.c < zb.bot else cd.c > zb.top
+        var zi = 0
+        while (zi < activeZones.size) {
+            val zb = activeZones[zi]
+            val dead = zb.status != ZoneStatus.ACTIVE || (if (zb.dir == 1) cd.c < zb.bot else cd.c > zb.top)
             if (dead) {
-                zb.status = ZoneStatus.DELETED
-                zb.endBi = i; zb.endT = cd.t
-            }
+                if (zb.status == ZoneStatus.ACTIVE) {
+                    zb.status = ZoneStatus.DELETED
+                    zb.endBi = i; zb.endT = cd.t
+                }
+                activeZones.removeAt(zi)
+            } else zi++
         }
         // چرخهٔ عمر باکس‌های LV/HV (تریگر ۱ و ۲): این باکس‌ها قبلاً فقط با فراخوانی صریح ستاپ
         // بسته می‌شدند؛ اگر ستاپ پاک/جایگزین/بازسازی می‌شد، باکس بی‌مالک می‌ماند و تا ابد
@@ -650,7 +706,6 @@ class Engine(val cfg: Settings) {
 
     private fun structureEngine(sb: Candle, buildZones: Boolean) {
         structBars.add(sb)
-        while (structBars.size > 400) structBars.removeAt(0)
         val nS = structBars.size
         val insideRef = updateStructureZoneRef(sb)
 
@@ -1153,7 +1208,7 @@ class Engine(val cfg: Settings) {
      * این جارو تضمین می‌کند هیچ باکس ACTIVE بدون مالک باقی نماند.
      */
     private fun sweepOrphanBoxes(bi: Int, t: Long) {
-        if (t1Zones.isEmpty() && t2Zones.isEmpty()) return
+        if (activeT1Zones.isEmpty() && activeT2Zones.isEmpty()) return
         val lvOwned = HashSet<Long>()
         val hvOwned = HashSet<Long>()
         for (s in setups) {
@@ -1161,21 +1216,33 @@ class Engine(val cfg: Settings) {
             if (s.hvZoneId >= 0) hvOwned.add(s.hvZoneId)
         }
         var n = 0
-        for (z in t1Zones) {
-            if (z.status != ZoneStatus.ACTIVE || z.id in lvOwned) continue
-            z.status = ZoneStatus.DELETED; z.endBi = bi; z.endT = t; n++
+        var i = 0
+        while (i < activeT1Zones.size) {
+            val z = activeT1Zones[i]
+            if (z.status != ZoneStatus.ACTIVE) activeT1Zones.removeAt(i)
+            else if (z.id !in lvOwned) {
+                z.status = ZoneStatus.DELETED; z.endBi = bi; z.endT = t; n++
+                activeT1Zones.removeAt(i)
+            } else i++
         }
-        for (z in t2Zones) {
-            if (z.status != ZoneStatus.ACTIVE || z.id in hvOwned) continue
-            z.status = ZoneStatus.DELETED; z.endBi = bi; z.endT = t; n++
+        i = 0
+        while (i < activeT2Zones.size) {
+            val z = activeT2Zones[i]
+            if (z.status != ZoneStatus.ACTIVE) activeT2Zones.removeAt(i)
+            else if (z.id !in hvOwned) {
+                z.status = ZoneStatus.DELETED; z.endBi = bi; z.endT = t; n++
+                activeT2Zones.removeAt(i)
+            } else i++
         }
         if (n > 0) lg("ENGINE", "باکس بی‌مالک بسته شد", "تعداد=$n bar=$bi")
     }
 
     private fun closeT1Box(s: Setup, status: Int, endBi: Int = curBi, endT: Long = curT) {
         if (s.lvZoneId >= 0) {
-            t1Zones.firstOrNull { it.id == s.lvZoneId && it.status == ZoneStatus.ACTIVE }?.let {
-                it.status = status; it.endBi = endBi; it.endT = endT
+            val index = activeT1Zones.indexOfFirst { it.id == s.lvZoneId && it.status == ZoneStatus.ACTIVE }
+            if (index >= 0) {
+                val box = activeT1Zones.removeAt(index)
+                box.status = status; box.endBi = endBi; box.endT = endT
             }
             s.lvZoneId = -1L
         }
@@ -1183,15 +1250,49 @@ class Engine(val cfg: Settings) {
 
     private fun closeT2Box(s: Setup, status: Int, endBi: Int = curBi, endT: Long = curT) {
         if (s.hvZoneId >= 0) {
-            t2Zones.firstOrNull { it.id == s.hvZoneId && it.status == ZoneStatus.ACTIVE }?.let {
-                it.status = status; it.endBi = endBi; it.endT = endT
+            val index = activeT2Zones.indexOfFirst { it.id == s.hvZoneId && it.status == ZoneStatus.ACTIVE }
+            if (index >= 0) {
+                val box = activeT2Zones.removeAt(index)
+                box.status = status; box.endBi = endBi; box.endT = endT
             }
             s.hvZoneId = -1L
         }
     }
 
     private fun addZoneBox(dir: Int, z: Zone, sb: Candle, status: Int) {
-        zones.add(ZoneBox(zoneSeq++, dir, z.idx, z.top, z.bot, sb.bi, sb.t, z.loIdx, z.hiIdx, sb.bi, sb.t, status))
+        val box = ZoneBox(zoneSeq++, dir, z.idx, z.top, z.bot, sb.bi, sb.t, z.loIdx, z.hiIdx, sb.bi, sb.t, status)
+        zones.add(box)
+        if (status == ZoneStatus.ACTIVE) activeZones.add(box)
+        indexedStructureZoneCount = zones.size
+    }
+
+    private fun addT1Zone(box: ZoneBox) {
+        t1Zones.add(box)
+        if (box.status == ZoneStatus.ACTIVE) activeT1Zones.add(box)
+        indexedT1ZoneCount = t1Zones.size
+    }
+
+    private fun addT2Zone(box: ZoneBox) {
+        t2Zones.add(box)
+        if (box.status == ZoneStatus.ACTIVE) activeT2Zones.add(box)
+        indexedT2ZoneCount = t2Zones.size
+    }
+
+    /** Rebuild indexes after restore/copy. Public zone histories remain authoritative. */
+    fun rebuildActiveZoneIndex() {
+        activeZones.clear(); activeT1Zones.clear(); activeT2Zones.clear()
+        zones.filterTo(activeZones) { it.status == ZoneStatus.ACTIVE }
+        t1Zones.filterTo(activeT1Zones) { it.status == ZoneStatus.ACTIVE }
+        t2Zones.filterTo(activeT2Zones) { it.status == ZoneStatus.ACTIVE }
+        indexedStructureZoneCount = zones.size
+        indexedT1ZoneCount = t1Zones.size
+        indexedT2ZoneCount = t2Zones.size
+    }
+
+    private fun ensureActiveZoneIndexes() {
+        if (indexedStructureZoneCount != zones.size || indexedT1ZoneCount != t1Zones.size || indexedT2ZoneCount != t2Zones.size) {
+            rebuildActiveZoneIndex()
+        }
     }
 
     /**
@@ -1546,7 +1647,7 @@ class Engine(val cfg: Settings) {
                 cnt.lv++
                 closeT1Box(s, ZoneStatus.DELETED, curBi, curT)
                 val zb1 = ZoneBox(zoneSeq++, s.dir, 1, s.lvH, s.lvL, s.lvBi, s.lvT, 0, 0, confBi, curT, ZoneStatus.ACTIVE)
-                t1Zones.add(zb1)
+                addT1Zone(zb1)
                 s.lvZoneId = zb1.id
                 addMarker(s.lvBi, if (bull) s.lvH else s.lvL, 5, "ناحیهٔ ولوم کم ✔ (تریگر۱)")
                 lg("ENGINE", "ناحیهٔ ولوم کم تایید شد (§18-16) · ستاپ #${s.id}",
@@ -1761,7 +1862,7 @@ class Engine(val cfg: Settings) {
                         if (!cfg.hvScanFirstTouch) s.hvScanBi = curBi
                         closeT1Box(s, ZoneStatus.DELETED, curBi, curT)
                         val zb1 = ZoneBox(zoneSeq++, s.dir, 1, s.lvH, s.lvL, s.lvBi, s.lvT, 0, 0, lvCloseBi, curT, ZoneStatus.ACTIVE)
-                        t1Zones.add(zb1)
+                        addT1Zone(zb1)
                         s.lvZoneId = zb1.id
                         addMarker(q1.bi, if (bullL) s.lvH else s.lvL, 5, "ناحیهٔ ولوم کم ✔ (تریگر۱)")
                         lg("ENGINE", "ناحیهٔ ولوم کم تایید شد · ستاپ #${s.id}",
@@ -2376,7 +2477,7 @@ class Engine(val cfg: Settings) {
         s.hvConfT = curT
         closeT2Box(s, ZoneStatus.DELETED, curBi, curT)
         val zb2 = ZoneBox(zoneSeq++, s.dir, 2, s.hvH, s.hvL, s.hvBi, s.hvT, 0, 0, curBi, curT, ZoneStatus.ACTIVE)
-        t2Zones.add(zb2)
+        addT2Zone(zb2)
         s.hvZoneId = zb2.id
         s.entry = eRef
         s.be = false
@@ -2623,20 +2724,52 @@ class Engine(val cfg: Settings) {
         }
     }
 
-    /** زمان‌های کندل با LongArray فشرده نگه‌داری می‌شوند؛ HashMap در تاریخچهٔ ده‌ساله OOM می‌داد. */
+    /** Timestamp cache for marker lookup; minute-aligned long runs use compact epoch minutes. */
     private var times = LongArray(0)
-    /** فقط کندل‌های seed ساختار ایندکس منفی دارند و تعدادشان محدود است. */
+    private var compactTimesMinutes: IntArray? = null
+    private var compactTimeRemainderMs = Long.MIN_VALUE
     private val seedTimes = HashMap<Int, Long>()
 
-    /** رزرو دقیق حافظه پیش از بک‌تست کامل، برای جلوگیری از چندبار کپی آرایه. */
     fun reserveTimeCapacity(bars: Int) {
         val capacity = bars.coerceAtMost(MAX_TIME_CAPACITY)
-        if (capacity > times.size) times = LongArray(capacity)
+        if (capacity <= 0) return
+        if (capacity >= COMPACT_TIME_THRESHOLD) {
+            if (capacity > (compactTimesMinutes?.size ?: 0)) {
+                compactTimesMinutes = IntArray(capacity)
+                compactTimeRemainderMs = Long.MIN_VALUE
+                times = LongArray(0)
+            }
+        } else if (capacity > times.size) {
+            times = LongArray(capacity)
+            compactTimesMinutes = null
+            compactTimeRemainderMs = Long.MIN_VALUE
+        }
     }
 
     private fun recordTime(bi: Int, t: Long) {
         if (bi < 0) { seedTimes[bi] = t; return }
-        if (bi >= MAX_TIME_CAPACITY) return // bound the live-session index cache on very long runtimes
+        if (bi >= MAX_TIME_CAPACITY) return
+        val compact = compactTimesMinutes
+        if (compact != null) {
+            if (bi >= compact.size) compactTimesMinutes = compact.copyOf(minOf(MAX_TIME_CAPACITY, maxOf(bi + 1, compact.size * 2)))
+            val remainder = Math.floorMod(t, 60_000L)
+            if (compactTimeRemainderMs == Long.MIN_VALUE) compactTimeRemainderMs = remainder
+            else if (remainder != compactTimeRemainderMs) {
+                val exact = LongArray(compact.size)
+                for (i in exact.indices) exact[i] = compact[i].toLong() * 60_000L + compactTimeRemainderMs
+                times = exact; compactTimesMinutes = null; compactTimeRemainderMs = Long.MIN_VALUE
+                recordTime(bi, t); return
+            }
+            val minute = Math.floorDiv(t, 60_000L)
+            if (minute !in Int.MIN_VALUE.toLong()..Int.MAX_VALUE.toLong()) {
+                val exact = LongArray(compact.size)
+                for (i in exact.indices) exact[i] = compact[i].toLong() * 60_000L + compactTimeRemainderMs
+                times = exact; compactTimesMinutes = null; compactTimeRemainderMs = Long.MIN_VALUE
+                recordTime(bi, t); return
+            }
+            compactTimesMinutes!![bi] = minute.toInt()
+            return
+        }
         if (bi >= times.size) {
             val doubled = if (times.isEmpty()) 16 else times.size * 2
             times = times.copyOf(minOf(MAX_TIME_CAPACITY, maxOf(bi + 1, doubled)))
@@ -2644,8 +2777,13 @@ class Engine(val cfg: Settings) {
         times[bi] = t
     }
 
-    private fun timeAt(bi: Int): Long? = if (bi < 0) seedTimes[bi]
+    private fun timeAt(bi: Int): Long? {
+        if (bi < 0) return seedTimes[bi]
+        val compact = compactTimesMinutes
+        return if (compact != null) compact.getOrNull(bi)?.takeIf { it != 0 }
+            ?.let { it.toLong() * 60_000L + compactTimeRemainderMs }
         else times.getOrNull(bi)?.takeIf { it != 0L }
+    }
 
     fun stageFa(st: Int): String = when (st) {
         0 -> "منتظر برخورد به ناحیهٔ ساختار"
@@ -2660,7 +2798,8 @@ class Engine(val cfg: Settings) {
     }
 
     companion object {
-        private const val MAX_TIME_CAPACITY = 5_000_000
+        private const val MAX_TIME_CAPACITY = 8_000_000
+        private const val COMPACT_TIME_THRESHOLD = 1_500_000
 
         /** حداقل تعداد ستاپ‌های در حال پیگیری (ناحیه‌های منتظر لمس تا معامله)؛ مستقل از «حداکثر ستاپ هم‌زمان». */
         const val TRACKED_SETUPS_MIN = 512

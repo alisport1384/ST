@@ -28,13 +28,16 @@ class RepositoryMultiYearDataTest {
             1_692_576_000_000L, 1_787_270_340_000L),
         Expected(10, 3_402_126, 43_314_146L,
             "c0e5c8d2151605db8d0cf1c75f3f1d6cca0ecc5304bad233f536ffe45d7f7881",
-            1_471_820_400_000L, 1_787_270_340_000L)
+            1_471_820_400_000L, 1_787_270_340_000L),
+        Expected(20, 6_563_723, 77_779_089L,
+            "ffbc7c1bd8723728714dfc2f476102f7887be3797d0caf187b622aa533c830c9",
+            1_156_118_520_000L, 1_787_270_340_000L)
     )
 
     private fun datasetFile(years: Int): File? = listOf(
         "datasets/goldpin_xauusd_m1_${years}y.csv.gz",
         "../datasets/goldpin_xauusd_m1_${years}y.csv.gz",
-        "/home/user/ST2/datasets/goldpin_xauusd_m1_${years}y.csv.gz"
+        "/home/user/ST20y_push/datasets/goldpin_xauusd_m1_${years}y.csv.gz"
     ).map(::File).firstOrNull { it.isFile }
 
     private fun sha256(file: File): String {
@@ -51,7 +54,7 @@ class RepositoryMultiYearDataTest {
     }
 
     @Test
-    fun `two three and ten year downloads have valid data and stable hashes`() {
+    fun `two three ten and twenty year downloads have valid data and stable hashes`() {
         for (expected in cases) {
             val file = datasetFile(expected.years)
                 ?: error("دیتاست ${expected.years} ساله در پوشهٔ datasets پیدا نشد")

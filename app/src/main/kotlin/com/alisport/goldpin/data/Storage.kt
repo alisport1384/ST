@@ -31,7 +31,7 @@ object Storage {
 
     fun autoFile(ctx: Context): File = File(dir(ctx), FILE_NAME)
 
-    private val supportedBacktestYears = setOf(1, 2, 3, 10)
+    private val supportedBacktestYears = setOf(1, 2, 3, 10, 20)
 
     fun internalFile(ctx: Context, years: Int = 1): File {
         require(years in supportedBacktestYears) { "بازهٔ داده پشتیبانی نمی‌شود: $years سال" }

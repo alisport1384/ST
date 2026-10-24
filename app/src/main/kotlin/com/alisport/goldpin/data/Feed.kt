@@ -37,15 +37,14 @@ data class BacktestDatasetSpec(
     val fallbackUrl: String? = null
 )
 
-/**
- * Primitive-backed candle view for the 10-year history. It keeps only primitive columns
- * (28 bytes/bar) instead of millions of heap-allocated Candle objects; a Candle is created
- * on demand when the engine/chart reads an index.
- */
+/** Primitive-backed candle view for multi-million-bar histories. */
 private const val PACKED_PRICE_SCALE = 100_000.0
+private const val MAX_PACKED_BACKTEST_BARS = 8_000_000
 
 private class PackedCandleList(
-    private val times: LongArray,
+    private val timesMs: LongArray?,
+    private val timesMinutes: IntArray?,
+    private val timeRemainderMs: Long,
     private val opens: IntArray,
     private val highs: IntArray,
     private val lows: IntArray,
@@ -55,7 +54,8 @@ private class PackedCandleList(
 ) : AbstractList<Candle>(), RandomAccess {
     override fun get(index: Int): Candle {
         if (index !in 0 until size) throw IndexOutOfBoundsException("index=$index size=$size")
-        return Candle(index, times[index], opens[index] / PACKED_PRICE_SCALE, highs[index] / PACKED_PRICE_SCALE,
+        val t = timesMs?.get(index) ?: (timesMinutes!![index].toLong() * 60_000L + timeRemainderMs)
+        return Candle(index, t, opens[index] / PACKED_PRICE_SCALE, highs[index] / PACKED_PRICE_SCALE,
             lows[index] / PACKED_PRICE_SCALE, closes[index] / PACKED_PRICE_SCALE, volumes[index].toDouble())
     }
 }
@@ -594,7 +594,7 @@ object Feed {
     }
 
     // ── دیتاست‌های بک‌تست داخلی (طرح B) ────────────────────────────────────────
-    // فایل‌های یک‌، دو، سه و ده‌ساله بیرون APK در ریپوی عمومی ST قرار دارند.
+    // فایل‌های یک‌، دو، سه، ده و بیست‌ساله بیرون APK در ریپوی عمومی ST قرار دارند.
     const val BACKTEST_DATA_URL =
         "https://raw.githubusercontent.com/alisport1384/ST/main/datasets/goldpin_xauusd_m1_1y.csv.gz"
     const val BACKTEST_DATA_FALLBACK_URL =
@@ -613,6 +613,10 @@ object Feed {
         "https://raw.githubusercontent.com/alisport1384/ST/main/datasets/goldpin_xauusd_m1_10y.csv.gz"
     const val BACKTEST_DATA_10Y_SHA256 = "c0e5c8d2151605db8d0cf1c75f3f1d6cca0ecc5304bad233f536ffe45d7f7881"
     const val BACKTEST_DATA_10Y_BARS = 3_402_126
+    const val BACKTEST_DATA_20Y_URL =
+        "https://raw.githubusercontent.com/alisport1384/ST/main/datasets/goldpin_xauusd_m1_20y.csv.gz"
+    const val BACKTEST_DATA_20Y_SHA256 = "ffbc7c1bd8723728714dfc2f476102f7887be3797d0caf187b622aa533c830c9"
+    const val BACKTEST_DATA_20Y_BARS = 6_563_723
 
     val BACKTEST_DATASETS = listOf(
         BacktestDatasetSpec(1, BACKTEST_DATA_BARS, 5_128_001L, BACKTEST_DATA_SHA256,
@@ -622,7 +626,9 @@ object Feed {
         BacktestDatasetSpec(3, BACKTEST_DATA_3Y_BARS, 14_310_975L, BACKTEST_DATA_3Y_SHA256,
             BACKTEST_DATA_3Y_URL),
         BacktestDatasetSpec(10, BACKTEST_DATA_10Y_BARS, 43_314_146L, BACKTEST_DATA_10Y_SHA256,
-            BACKTEST_DATA_10Y_URL)
+            BACKTEST_DATA_10Y_URL),
+        BacktestDatasetSpec(20, BACKTEST_DATA_20Y_BARS, 77_779_089L, BACKTEST_DATA_20Y_SHA256,
+            BACKTEST_DATA_20Y_URL)
     )
 
     fun backtestDataset(years: Int): BacktestDatasetSpec = BACKTEST_DATASETS.firstOrNull { it.years == years }
@@ -681,18 +687,17 @@ object Feed {
         return out
     }
 
-    /**
-     * Parser مخصوص فایل ۱۰ساله: خروجی primitive-backed است تا ۳٫۴ میلیون کندل به
-     * چندصد مگابایت شیء Candle تبدیل نشود. فایل منتشرشدهٔ این مسیر با timestamp صعودی است.
-     */
+    /** Parser فشرده برای تاریخچه‌های چندمیلیونی (۱۰ و ۲۰ سال). */
     fun parseCsvPackedStream(stream: java.io.InputStream, expectedBars: Int = BACKTEST_DATA_10Y_BARS): List<Candle> {
         val buffered = java.io.BufferedInputStream(stream, 1 shl 16)
         buffered.mark(4)
         val b0 = buffered.read(); val b1 = buffered.read()
         buffered.reset()
         val ins = if (b0 == 0x1f && b1 == 0x8b) GZIPInputStream(buffered) else buffered
-        var capacity = expectedBars.coerceIn(16, 5_000_000)
-        var times = LongArray(capacity)
+        var capacity = expectedBars.coerceIn(16, MAX_PACKED_BACKTEST_BARS)
+        var timesMinutes: IntArray? = IntArray(capacity)
+        var timesMs: LongArray? = null
+        var timeRemainderMs = Long.MIN_VALUE
         var opens = IntArray(capacity)
         var highs = IntArray(capacity)
         var lows = IntArray(capacity)
@@ -720,34 +725,49 @@ object Feed {
                 val f = line.indexOf(',', e + 1)
                 val msRaw = parseLongField(line, 0, a)
                 val ms = if (msRaw < 100_000_000_000L) msRaw * 1000L else msRaw
-                if (ms <= previousTime) throw FeedException("فایل ده‌ساله مرتب زمانی نیست یا timestamp تکراری دارد")
+                if (ms <= previousTime) throw FeedException("فایل دیتاست بلند مرتب زمانی نیست یا timestamp تکراری دارد")
                 if (count == capacity) {
-                    val next = minOf(5_000_000, capacity * 2)
+                    val next = minOf(MAX_PACKED_BACKTEST_BARS, capacity * 2)
                     if (next <= capacity) throw FeedException("تعداد کندل‌های فایل از حد پشتیبانی‌شده بیشتر است")
-                    times = times.copyOf(next); opens = opens.copyOf(next); highs = highs.copyOf(next)
+                    timesMinutes = timesMinutes?.copyOf(next)
+                    timesMs = timesMs?.copyOf(next)
+                    opens = opens.copyOf(next); highs = highs.copyOf(next)
                     lows = lows.copyOf(next); closes = closes.copyOf(next); volumes = volumes.copyOf(next)
                     capacity = next
                 }
                 try {
-                    times[count] = ms
+                    val remainder = Math.floorMod(ms, 60_000L)
+                    if (timesMinutes != null && timeRemainderMs == Long.MIN_VALUE) timeRemainderMs = remainder
+                    if (timesMinutes != null && remainder == timeRemainderMs && ms / 60_000L in Int.MIN_VALUE.toLong()..Int.MAX_VALUE.toLong()) {
+                        timesMinutes!![count] = (ms / 60_000L).toInt()
+                    } else {
+                        if (timesMs == null) {
+                            timesMs = LongArray(capacity)
+                            val minuteTimes = timesMinutes!!
+                            for (j in 0 until count) timesMs!![j] = minuteTimes[j].toLong() * 60_000L + timeRemainderMs
+                            timesMinutes = null
+                        }
+                        timesMs!![count] = ms
+                    }
                     opens[count] = parsePriceScaled(line, a + 1, b)
                     highs[count] = parsePriceScaled(line, b + 1, c)
                     lows[count] = parsePriceScaled(line, c + 1, d)
                     closes[count] = parsePriceScaled(line, d + 1, e)
                     volumes[count] = parseRoundedInt(line, e + 1, if (f < 0) line.length else f)
                 } catch (ex: Exception) {
-                    throw FeedException("مقدار عددی نامعتبر در دیتاست ده‌ساله، ردیف ${count + 1}: ${ex.message}")
+                    throw FeedException("مقدار عددی نامعتبر در دیتاست بلند، ردیف ${count + 1}: ${ex.message}")
                 }
                 previousTime = ms
                 count++
             }
         }
         if (count == 0) throw FeedException("فایل دادهٔ بک‌تست خوانده نشد")
-        if (count != expectedBars) Log.w(Log.CAT_FEED, "تعداد کندل با متادیتای ده‌ساله فرق دارد",
+        if (count != expectedBars) Log.w(Log.CAT_FEED, "تعداد کندل با متادیتای دیتاست بلند فرق دارد",
             "انتظار=$expectedBars واقعی=$count")
-        Log.i(Log.CAT_FEED, "دیتاست ده‌سالهٔ فشرده در حافظه بارگذاری شد",
-            "کندل=$count بایت‌دادهٔ فشرده‌شده‌در‌حافظه=${count.toLong() * 28L}")
-        return PackedCandleList(times, opens, highs, lows, closes, volumes, count)
+        val timeBytes = if (timesMinutes != null) 4L else 8L
+        Log.i(Log.CAT_FEED, "دیتاست بلند فشرده در حافظه بارگذاری شد",
+            "کندل=$count بایت‌دادهٔ فشرده‌شده‌در‌حافظه=${count.toLong() * (20L + timeBytes)}")
+        return PackedCandleList(timesMs, timesMinutes, timeRemainderMs, opens, highs, lows, closes, volumes, count)
     }
 
     private fun parseLongField(s: String, start: Int, end: Int): Long {
@@ -813,7 +833,7 @@ object Feed {
     }
 
     fun parseBacktestStream(stream: java.io.InputStream, spec: BacktestDatasetSpec): List<Candle> =
-        if (spec.years == 10) parseCsvPackedStream(stream, spec.bars) else parseCsvStream(stream, spec.bars)
+        if (spec.years >= 10) parseCsvPackedStream(stream, spec.bars) else parseCsvStream(stream, spec.bars)
 
     /** دانلود فایل دادهٔ بک‌تست با گزارش پیشرفت (بایت دریافتی از کل). */
     fun downloadTo(urlStr: String, dest: java.io.File, onProgress: (Long, Long) -> Unit = { _, _ -> }) {

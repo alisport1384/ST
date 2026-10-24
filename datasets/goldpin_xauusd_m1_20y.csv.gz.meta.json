@@ -1,0 +1,16 @@
+{
+  "file": "goldpin_xauusd_m1_20y.csv.gz",
+  "bars": 6563723,
+  "bytesGz": 77779089,
+  "sha256": "ffbc7c1bd8723728714dfc2f476102f7887be3797d0caf187b622aa533c830c9",
+  "fromUtc": "2006-08-21T00:02:00+00:00",
+  "toUtc": "2026-08-20T23:59:00+00:00",
+  "sourceRows": 6886934,
+  "droppedWeekend": 0,
+  "droppedDup": 0,
+  "droppedInvalid": 0,
+  "zeroVolumeBars": 0,
+  "gapsOverHours": 1071,
+  "sourceTimezone": "Europe/Berlin (DST-aware) → UTC",
+  "columns": "timestamp(ms,UTC),open,high,low,close,volume"
+}
